@@ -103,7 +103,7 @@ const steps = [1, 2, 3, 4]
 const stepNames = { 1: '数据库', 2: '管理员', 3: '密钥', 4: '安装' }
 
 const form = reactive({
-  mongoUri: 'mongodb://localhost:27017/tracking',
+  mongoUri: 'mongodb://mongo:27017/tracking',
   jwtSecret: '',
   adminEmail: '',
   adminPassword: '',

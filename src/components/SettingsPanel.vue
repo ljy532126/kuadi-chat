@@ -31,7 +31,7 @@
               <span class="section-title">🤖 DeepSeek AI</span>
               <span class="status-dot" :class="dsOk ? 'ok' : 'miss'"></span>
             </div>
-            <p class="section-desc">配置后可智能对话，AI 自动识别单号、引导操作、解答疑问</p>
+            <p class="section-desc">配置后可智能对话，AI 自动识别单号、引导操作、解答疑问，在 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener" class="link">platform.deepseek.com</a> 获取</p>
             <el-input v-model="localDeepseek" type="password" show-password placeholder="sk-..." size="default" clearable />
             <div class="test-row" v-if="localDeepseek">
               <el-button size="small" :loading="testing" @click="testDeepseek" :disabled="!localDeepseek.trim()">测试连接</el-button>

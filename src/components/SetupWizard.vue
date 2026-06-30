@@ -152,7 +152,11 @@ function buildMongoUri() {
   if (form.mongoUser && form.mongoPass) {
     uri += encodeURIComponent(form.mongoUser) + ':' + encodeURIComponent(form.mongoPass) + '@'
   }
-  return uri + form.mongoHost + ':' + form.mongoPort + '/' + form.mongoDb
+  uri += form.mongoHost + ':' + form.mongoPort + '/' + form.mongoDb
+  if (form.mongoUser && form.mongoPass) {
+    uri += '?authSource=admin'
+  }
+  return uri
 }
 
 async function testMongo() {

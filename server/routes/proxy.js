@@ -11,7 +11,7 @@ async function resolveUapiKey(req) {
   if (req.headers['x-use-global'] === '1') {
     const cfg = await GlobalConfig.findById('global').lean()
     if (cfg && cfg.enabled && cfg.uapiKey) {
-      return 'Bearer uapi-' + cfg.uapiKey
+      return 'Bearer ' + (cfg.uapiKey.startsWith('uapi-') ? cfg.uapiKey : 'uapi-' + cfg.uapiKey)
     }
   }
   return req.headers['x-uapi-key'] || ''

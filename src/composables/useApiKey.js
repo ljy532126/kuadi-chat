@@ -32,10 +32,8 @@ export function useApiKey() {
   }
 
   function saveUapi(raw) {
-    let key = raw.trim()
-    if (key.startsWith('uapi-')) key = key.slice(5)
-    keys.uapi = key
-    try { localStorage.setItem(KEYS.uapi, key) } catch {}
+    keys.uapi = raw.trim()
+    try { localStorage.setItem(KEYS.uapi, keys.uapi) } catch {}
   }
 
   function saveDeepseek(raw) {

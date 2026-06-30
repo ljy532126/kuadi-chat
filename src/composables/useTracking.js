@@ -8,7 +8,7 @@ export async function queryTracking(apiKey, { tracking_number, carrier_code, pho
   if (useGlobal) {
     headers['X-Use-Global'] = '1'
   } else {
-    headers['X-Uapi-Key'] = 'Bearer uapi-' + apiKey
+    headers['X-Uapi-Key'] = 'Bearer ' + apiKey
   }
   if (authToken) headers['Authorization'] = 'Bearer ' + authToken
 

@@ -19,7 +19,7 @@
               <span class="status-dot" :class="uapiOk ? 'ok' : 'miss'"></span>
             </div>
             <p class="section-desc">用于查询快递物流信息，在 <a href="https://uapis.cn" target="_blank" rel="noopener" class="link">uapis.cn</a> 获取</p>
-            <el-input v-model="localUapi" type="password" show-password placeholder="uapi- 前缀自动补全" size="default" clearable />
+            <el-input v-model="localUapi" type="password" show-password placeholder="输入完整密钥" size="default" clearable />
             <div class="test-row" v-if="localUapi">
               <el-button size="small" :loading="testingUapi" @click="testUapi" :disabled="!localUapi.trim()">测试连接</el-button>
               <span v-if="testUapiResult" :class="testUapiResult.ok ? 'test-ok' : 'test-fail'">{{ testUapiResult.msg }}</span>
@@ -92,7 +92,7 @@ function handleClearAll() {
 async function testUapi() {
   testingUapi.value = true; testUapiResult.value = null
   try {
-    const key = 'uapi-' + localUapi.value.trim()
+    const key = localUapi.value.trim()
     // Test with a dummy tracking number — we just check if key is valid
     const url = new URL('/api/v1/misc/tracking/query', window.location.origin)
     url.searchParams.set('tracking_number', 'JT0000000000')

@@ -6,7 +6,7 @@ services:
       - "3014:3014"
     environment:
       - PORT=3014
-      - MONGO_URI=mongodb://mongo:27017/tracking
+      - MONGO_URI=mongodb://kuaidi:kuaidi123@mongo:27017/tracking?authSource=admin
       - JWT_SECRET=kuaidi2024secure
     depends_on:
       - mongo
@@ -15,6 +15,9 @@ services:
   mongo:
     image: docker.m.daocloud.io/library/mongo:7
     container_name: tracking-mongo
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=kuaidi
+      - MONGO_INITDB_ROOT_PASSWORD=kuaidi123
     volumes:
       - mongo_data:/data/db
     restart: unless-stopped

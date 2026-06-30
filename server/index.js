@@ -67,9 +67,19 @@ app.get('/api/health', (req, res) => {
 // Proxy routes (UAPI + DeepSeek + quota check)
 app.use('/', proxyRoutes)
 
-// Serve Vite dist in production
+// Serve Vite dist in production — short cache for HTML, long for assets
 const distPath = path.resolve(__dirname, '..', 'dist')
-app.use(express.static(distPath, { maxAge: '7d' }))
+app.use(express.static(distPath, {
+  maxAge: '1h',  // short cache to prevent Cloudflare from holding stale assets
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.html')) {
+      // Never cache index.html — always get latest frontend
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+      res.setHeader('Pragma', 'no-cache')
+      res.setHeader('Expires', '0')
+    }
+  }
+}))
 app.get('*', (req, res, next) => {
   if (req.url.startsWith('/api/') || req.url.startsWith('/deepseek/')) return next()
   res.sendFile(path.join(distPath, 'index.html'), err => {

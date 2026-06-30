@@ -7,6 +7,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import authRoutes from './routes/auth.js'
 import statsRoutes from './routes/stats.js'
+import adminRoutes from './routes/admin.js'
 import proxyRoutes from './routes/proxy.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -50,6 +51,9 @@ app.use('/api/auth', authRoutes)
 
 // Stats routes
 app.use('/api/stats', statsRoutes)
+
+// Admin routes
+app.use('/api/admin', adminRoutes)
 
 // Health check
 app.get('/api/health', (req, res) => {

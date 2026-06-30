@@ -14,6 +14,9 @@
       <button v-if="isLoggedIn" class="icon-btn" title="设置 API 密钥" @click="$emit('toggle-settings')">
         <Cog6ToothIcon class="nav-icon" />
       </button>
+      <button v-if="isAdmin" class="icon-btn" title="管理员配置" @click="$emit('toggle-admin')">
+        <ShieldCheckIcon class="nav-icon admin-icon" />
+      </button>
 
       <!-- User / Login -->
       <button v-if="isLoggedIn" class="user-btn" title="已登录">
@@ -34,10 +37,10 @@
 
 <script setup>
 import { CubeIcon } from '@heroicons/vue/24/solid'
-import { Cog6ToothIcon, MegaphoneIcon, UserCircleIcon, ChartBarIcon, ArrowRightStartOnRectangleIcon } from '@heroicons/vue/24/outline'
+import { Cog6ToothIcon, MegaphoneIcon, UserCircleIcon, ChartBarIcon, ArrowRightStartOnRectangleIcon, ShieldCheckIcon } from '@heroicons/vue/24/outline'
 
-defineProps({ avatarUrl: String, isLoggedIn: Boolean, userEmail: String })
-defineEmits(['toggle-settings', 'toggle-announce', 'toggle-avatar', 'toggle-stats', 'logout', 'toggle-auth'])
+defineProps({ avatarUrl: String, isLoggedIn: Boolean, userEmail: String, isAdmin: Boolean })
+defineEmits(['toggle-settings', 'toggle-announce', 'toggle-avatar', 'toggle-stats', 'logout', 'toggle-auth', 'toggle-admin'])
 </script>
 
 <style scoped>
@@ -68,6 +71,8 @@ defineEmits(['toggle-settings', 'toggle-announce', 'toggle-avatar', 'toggle-stat
 .user-btn:hover { background: rgba(255,255,255,0.18); }
 .user-email { color: #ddd; font-size: 12px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .logout-hint:hover { color: #f56c6c; }
+.admin-icon { color: #f59e0b; }
+.icon-btn:hover .admin-icon { color: #fbbf24; }
 
 .avatar-btn {
   background: none; border: 1px dashed rgba(255,255,255,0.25); border-radius: 6px;

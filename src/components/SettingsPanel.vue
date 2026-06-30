@@ -10,6 +10,9 @@
         </div>
 
         <div class="drawer-body">
+          <div v-if="usingGlobal" class="global-notice">
+            ⚡ 管理员已配置全局 API Key，所有用户可直接使用。
+          </div>
           <!-- UAPI -->
           <div class="key-section">
             <div class="section-header">
@@ -50,7 +53,7 @@
 import { ref, watch, computed } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 
-const props = defineProps({ uapiKey: String, deepseekKey: String, visible: Boolean })
+const props = defineProps({ uapiKey: String, deepseekKey: String, visible: Boolean, usingGlobal: Boolean })
 const emit = defineEmits(['save-uapi', 'save-deepseek', 'clear-all', 'update:visible'])
 
 const localUapi = ref(props.uapiKey)
@@ -135,6 +138,11 @@ async function testDeepseek() {
 
 .link { color: #07c160; text-decoration: none; font-weight: 500; }
 .link:hover { text-decoration: underline; }
+
+.global-notice {
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+  padding: 10px 14px; font-size: 13px; color: #92400e; line-height: 1.5;
+}
 
 .drawer-footer {
   display: flex; gap: 10px; justify-content: flex-end;

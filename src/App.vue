@@ -3,12 +3,14 @@
     <HeaderBar
       :avatarUrl="userAvatar"
       :isLoggedIn="isLoggedIn"
+      :isAdmin="isAdmin"
       :userEmail="email"
       @toggle-settings="showSettings = !showSettings"
       @toggle-announce="showAnnounce = !showAnnounce"
       @toggle-avatar="showAvatarDialog = !showAvatarDialog"
       @toggle-stats="showStats = !showStats"
       @toggle-auth="showAuth = !showAuth"
+      @toggle-admin="showAdmin = !showAdmin"
       @logout="handleLogout"
     />
 
@@ -16,11 +18,14 @@
       :uapiKey="keys.uapi"
       :deepseekKey="keys.deepseek"
       :visible="showSettings"
+      :usingGlobal="usingGlobal"
       @save-uapi="handleSaveUapi"
       @save-deepseek="handleSaveDeepseek"
       @clear-all="handleClearAll"
       @update:visible="showSettings = $event"
     />
+
+    <AdminPanel v-if="isAdmin" v-model="showAdmin" :token="token" @saved="onAdminSaved" />
 
     <AuthDialog v-model="showAuth" />
 
@@ -57,7 +62,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import HeaderBar from './components/HeaderBar.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import ChatArea from './components/ChatArea.vue'
@@ -67,6 +72,7 @@ import AnnouncementDialog from './components/AnnouncementDialog.vue'
 import AvatarDialog from './components/AvatarDialog.vue'
 import StatsDialog from './components/StatsDialog.vue'
 import AuthDialog from './components/AuthDialog.vue'
+import AdminPanel from './components/AdminPanel.vue'
 import { useApiKey } from './composables/useApiKey.js'
 import { useAuth } from './composables/useAuth.js'
 import { useAvatar } from './composables/useAvatar.js'
@@ -77,8 +83,8 @@ import { copyText, captureTrackingResult } from './composables/useClipboard.js'
 import { parseInput } from './utils/parseInput.js'
 import { sanitizeText } from './utils/sanitize.js'
 
-const { keys, hasUapi, hasDeepseek, saveUapi, saveDeepseek, clearUapi, clearDeepseek } = useApiKey()
-const { token, email, isLoggedIn, logout } = useAuth()
+const { keys, globalEnabled, globalHasUapi, globalHasDeepseek, hasUapi, hasDeepseek, usingGlobal, saveUapi, saveDeepseek, clearUapi, clearDeepseek, fetchGlobalConfig } = useApiKey()
+const { token, email, isAdmin, isLoggedIn, logout, checkAdmin } = useAuth()
 const { avatar: userAvatar, saveAvatar, clearAvatar } = useAvatar()
 const { stats, trackQuery, clearStats: resetStats } = useStats()
 
@@ -87,6 +93,7 @@ const showAnnounce = ref(false)
 const showAvatarDialog = ref(false)
 const showStats = ref(false)
 const showAuth = ref(false)
+const showAdmin = ref(false)
 const messages = reactive([])
 const isQuerying = ref(false)
 const toastMsg = ref('')
@@ -154,6 +161,11 @@ function handleClearAvatar() {
 
 function clearStats() { resetStats() }
 
+function onAdminSaved() {
+  fetchGlobalConfig()
+  showToast('全局配置已更新')
+}
+
 const HELP_TEXT = `<b>📦 快递查询助手使用指南</b><br><br>
 <b>直接查：</b>输入快递单号即可自动识别快递公司<br>
 <span style="color:#999;">例：JT0001234567890</span><br><br>
@@ -188,7 +200,7 @@ async function handleSend(text) {
     const thinkingIdx = messages.length
     messages.push({ id: ++msgId, role: 'system', type: 'thinking' })
 
-    const dsResult = await chatWithDeepSeek(keys.deepseek, text, chatHistory)
+    const dsResult = await chatWithDeepSeek(keys.deepseek, text, chatHistory, usingGlobal.value)
 
     const thinkMsg = messages[thinkingIdx]
     if (dsResult.error) {
@@ -207,7 +219,7 @@ async function handleSend(text) {
       const trackIdx = messages.length
       messages.push({ id: ++msgId, role: 'system', type: 'thinking' })
 
-      const result = await queryTracking(keys.uapi, parsed, token.value)
+      const result = await queryTracking(keys.uapi, parsed, token.value, usingGlobal.value)
       const trackMsg = messages[trackIdx]
 
       if (result.error) {
@@ -283,13 +295,17 @@ function handleCopyImage(idx) {
   captureTrackingResult(msg.data, 'clipboard').then(() => showToast('图片已复制到剪贴板')).catch(e => showToast(e.message || '复制图片失败'))
 }
 
-messages.push({
-  id: ++msgId,
-  role: 'system',
-  type: 'text',
-  text: isLoggedIn.value
-    ? '👋 <b>欢迎回来！</b> 我是 AI 快递查询助手<br><br>登录用户享受无限次查询，直接输入单号开始吧~'
-    : '👋 <b>你好！我是快递查询助手</b><br><br>直接输入快递单号即可查询物流信息。<br><span style="font-size:13px;color:#999;">📌 未登录每天免费查询 10 次，</span><span style="font-size:13px;color:#07c160;">注册登录享受无限次数</span>'
+onMounted(async () => {
+  await fetchGlobalConfig()
+  if (isLoggedIn.value) await checkAdmin()
+  messages.push({
+    id: ++msgId,
+    role: 'system',
+    type: 'text',
+    text: isLoggedIn.value
+      ? '👋 <b>欢迎回来！</b> 我是 AI 快递查询助手<br><br>登录用户享受无限次查询，直接输入单号开始吧~'
+      : '👋 <b>你好！我是快递查询助手</b><br><br>直接输入快递单号即可查询物流信息。<br><span style="font-size:13px;color:#999;">📌 未登录每天免费查询 10 次，</span><span style="font-size:13px;color:#07c160;">注册登录享受无限次数</span>'
+  })
 })
 </script>
 

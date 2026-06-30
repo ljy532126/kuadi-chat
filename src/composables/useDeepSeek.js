@@ -29,7 +29,7 @@ function resetCallCount() {
 }
 resetCallCount()
 
-export async function chatWithDeepSeek(apiKey, userMessage, history = []) {
+export async function chatWithDeepSeek(apiKey, userMessage, history = [], useGlobal = false) {
   const now = Date.now()
   const elapsed = now - lastCallTime
 
@@ -56,7 +56,8 @@ export async function chatWithDeepSeek(apiKey, userMessage, history = []) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Ds-Key': 'Bearer ' + apiKey
+        'X-Ds-Key': useGlobal ? '' : ('Bearer ' + apiKey),
+        'X-Use-Global': useGlobal ? '1' : '0'
       },
       body: JSON.stringify({
         model: 'deepseek-chat',

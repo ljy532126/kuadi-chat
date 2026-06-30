@@ -1,12 +1,14 @@
-export async function queryTracking(apiKey, { tracking_number, carrier_code, phone }, authToken = '') {
+export async function queryTracking(apiKey, { tracking_number, carrier_code, phone }, authToken = '', useGlobal = false) {
   const url = new URL('/api/v1/misc/tracking/query', window.location.origin)
   url.searchParams.set('tracking_number', tracking_number)
   if (carrier_code) url.searchParams.set('carrier_code', carrier_code)
   if (phone) url.searchParams.set('phone', phone)
 
-  const headers = {
-    'Accept': 'application/json',
-    'X-Uapi-Key': 'Bearer uapi-' + apiKey
+  const headers = { 'Accept': 'application/json' }
+  if (useGlobal) {
+    headers['X-Use-Global'] = '1'
+  } else {
+    headers['X-Uapi-Key'] = 'Bearer uapi-' + apiKey
   }
   if (authToken) headers['Authorization'] = 'Bearer ' + authToken
 

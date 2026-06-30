@@ -5,6 +5,7 @@ const EMAIL_KEY = 'auth_email'
 
 const token = ref(localStorage.getItem(TOKEN_KEY) || '')
 const email = ref(localStorage.getItem(EMAIL_KEY) || '')
+const isAdmin = ref(false)
 
 export function useAuth() {
   const isLoggedIn = computed(() => !!token.value)
@@ -14,13 +15,30 @@ export function useAuth() {
     email.value = e
     localStorage.setItem(TOKEN_KEY, t)
     localStorage.setItem(EMAIL_KEY, e)
+    checkAdmin()
   }
 
   function clearAuth() {
     token.value = ''
     email.value = ''
+    isAdmin.value = false
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(EMAIL_KEY)
+  }
+
+  async function checkAdmin() {
+    if (!token.value) { isAdmin.value = false; return }
+    try {
+      const res = await fetch('/api/admin/me', {
+        headers: { Authorization: 'Bearer ' + token.value }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        isAdmin.value = data.role === 'admin'
+      } else {
+        isAdmin.value = false
+      }
+    } catch { isAdmin.value = false }
   }
 
   async function register(em, pw) {
@@ -49,9 +67,7 @@ export function useAuth() {
     return data
   }
 
-  function logout() {
-    clearAuth()
-  }
+  function logout() { clearAuth() }
 
-  return { token, email, isLoggedIn, register, login, logout }
+  return { token, email, isAdmin, isLoggedIn, register, login, logout, checkAdmin }
 }

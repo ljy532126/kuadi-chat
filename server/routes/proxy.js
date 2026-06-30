@@ -2,24 +2,41 @@ import { Router } from 'express'
 import https from 'https'
 import { verifyToken } from '../middleware/auth.js'
 import { rateLimitMiddleware, consumeFreeQuery, getFreeQuota } from '../middleware/rateLimit.js'
+import GlobalConfig from '../models/GlobalConfig.js'
 
 const router = Router()
 
-// UAPI proxy — requires auth (logged-in or free quota)
-router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, (req, res) => {
-  const ip = req.ip || req.socket.remoteAddress || 'unknown'
+// Resolve UAPI key — checks global config first if x-use-global header is set
+async function resolveUapiKey(req) {
+  if (req.headers['x-use-global'] === '1') {
+    const cfg = await GlobalConfig.findById('global').lean()
+    if (cfg && cfg.enabled && cfg.uapiKey) {
+      return 'Bearer uapi-' + cfg.uapiKey
+    }
+  }
+  return req.headers['x-uapi-key'] || ''
+}
 
-  // Check authentication
+// Resolve DeepSeek key
+async function resolveDsKey(req) {
+  if (req.headers['x-use-global'] === '1') {
+    const cfg = await GlobalConfig.findById('global').lean()
+    if (cfg && cfg.enabled && cfg.deepseekKey) {
+      return 'Bearer ' + cfg.deepseekKey
+    }
+  }
+  return req.headers['x-ds-key'] || ''
+}
+
+// UAPI proxy
+router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, async (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown'
   const header = req.headers.authorization
   let isAuth = false
   if (header && header.startsWith('Bearer ')) {
-    try {
-      verifyToken(header.slice(7))
-      isAuth = true
-    } catch {}
+    try { verifyToken(header.slice(7)); isAuth = true } catch {}
   }
 
-  // Free quota check
   if (!isAuth) {
     const left = getFreeQuota(ip)
     if (left <= 0) {
@@ -31,9 +48,9 @@ router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, (req, res) => {
     consumeFreeQuery(ip)
   }
 
-  // Proxy to UAPI
   const targetUrl = 'https://uapis.cn/api/v1/misc/tracking/query?' + new URLSearchParams(req.query).toString()
-  const uapiKey = req.headers['x-uapi-key'] || ''
+  const uapiKey = await resolveUapiKey(req)
+
   const uapiReq = https.get(targetUrl, {
     headers: { 'Authorization': uapiKey, 'Accept': 'application/json' },
     timeout: 10000
@@ -51,54 +68,29 @@ router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, (req, res) => {
       }
     })
   })
-  uapiReq.on('timeout', () => {
-    uapiReq.destroy()
-    res.status(504).json({ error: '查询服务超时，请稍后重试' })
-  })
-  uapiReq.on('error', (e) => {
-    console.error('UAPI proxy error:', e.message)
-    res.status(502).json({ error: '代理请求失败' })
-  })
+  uapiReq.on('timeout', () => { uapiReq.destroy(); res.status(504).json({ error: '查询服务超时' }) })
+  uapiReq.on('error', (e) => { console.error('UAPI error:', e.message); res.status(502).json({ error: '代理请求失败' }) })
 })
 
 // DeepSeek proxy
-router.post('/deepseek/v1/chat/completions', (req, res) => {
-  const dsKey = req.headers['x-ds-key'] || ''
-
-  // If body was already parsed by express.json(), req.body is available
-  const bodyStr = req.body && Object.keys(req.body).length > 0
-    ? JSON.stringify(req.body)
-    : null
+router.post('/deepseek/v1/chat/completions', async (req, res) => {
+  const dsKey = await resolveDsKey(req)
+  const bodyStr = req.body && Object.keys(req.body).length > 0 ? JSON.stringify(req.body) : null
 
   function makeRequest(bodyString) {
     const proxy = https.request('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': String(Buffer.byteLength(bodyString)),
-        'Authorization': dsKey
-      },
+      headers: { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(bodyString)), 'Authorization': dsKey },
       timeout: 15000
-    }, (proxyRes) => {
-      res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json' })
-      proxyRes.pipe(res)
-    })
-
-    proxy.on('timeout', () => {
-      proxy.destroy()
-      res.status(504).json({ error: 'AI 服务响应超时' })
-    })
-    proxy.on('error', (e) => {
-      console.error('DeepSeek proxy error:', e.message)
-      res.status(502).json({ error: 'AI 连接失败' })
-    })
+    }, (proxyRes) => { res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json' }); proxyRes.pipe(res) })
+    proxy.on('timeout', () => { proxy.destroy(); res.status(504).json({ error: 'AI 服务响应超时' }) })
+    proxy.on('error', (e) => { console.error('DS error:', e.message); res.status(502).json({ error: 'AI 连接失败' }) })
     proxy.write(bodyString)
     proxy.end()
   }
 
-  if (bodyStr) {
-    makeRequest(bodyStr)
-  } else {
+  if (bodyStr) { makeRequest(bodyStr) }
+  else {
     const chunks = []
     req.on('data', c => chunks.push(c))
     req.on('end', () => makeRequest(Buffer.concat(chunks).toString()))

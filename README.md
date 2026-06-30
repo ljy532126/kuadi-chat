@@ -22,40 +22,34 @@
 
 ## 快速开始
 
-### 1. 启动 MongoDB
+### 一键部署（Docker）
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-如果本机已安装 MongoDB 可跳过。
+### 安装向导
 
-### 2. 安装依赖
+首次启动后访问 `http://你的IP:3014`，自动进入安装向导：
+
+1. **数据库** — 填写 MongoDB 连接地址和 JWT 密钥
+2. **管理员** — 创建管理员邮箱和密码
+3. **API 密钥** — 可选，配置全局 UAPI/DeepSeek 密钥
+4. **安装** — 点击开始安装，自动完成初始化
+
+安装完成后自动登录，即可开始使用。
+
+### 开发模式
 
 ```bash
-npm install
-```
-
-### 3. 启动后端（端口 3014）
-
-```bash
+# 终端 1: Express 后端
 npm start
-```
 
-### 4. 启动前端开发服务器（端口 5173）
-
-```bash
+# 终端 2: Vite 前端
 npm run dev
 ```
 
 浏览器打开 `http://localhost:5173`
-
-### 5. 生产部署
-
-```bash
-npm run build
-JWT_SECRET=你的密钥 PORT=3014 npm start
-```
 
 ## 环境变量
 

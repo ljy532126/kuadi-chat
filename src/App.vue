@@ -1,5 +1,9 @@
 <template>
-  <div class="app">
+  <div v-if="!setupChecked" class="loading-screen">
+    <div class="loading-spinner"></div>
+  </div>
+  <SetupWizard v-else-if="needsSetup" @done="window.location.reload()" />
+  <div v-else class="app">
     <HeaderBar
       :avatarUrl="userAvatar"
       :isLoggedIn="isLoggedIn"
@@ -73,6 +77,7 @@ import AvatarDialog from './components/AvatarDialog.vue'
 import StatsDialog from './components/StatsDialog.vue'
 import AuthDialog from './components/AuthDialog.vue'
 import AdminPanel from './components/AdminPanel.vue'
+import SetupWizard from './components/SetupWizard.vue'
 import { useApiKey } from './composables/useApiKey.js'
 import { useAuth } from './composables/useAuth.js'
 import { useAvatar } from './composables/useAvatar.js'
@@ -94,6 +99,8 @@ const showAvatarDialog = ref(false)
 const showStats = ref(false)
 const showAuth = ref(false)
 const showAdmin = ref(false)
+const needsSetup = ref(false)
+const setupChecked = ref(false)
 const messages = reactive([])
 const isQuerying = ref(false)
 const toastMsg = ref('')
@@ -296,8 +303,24 @@ function handleCopyImage(idx) {
 }
 
 onMounted(async () => {
+  // Check if app needs setup
+  try {
+    const res = await fetch('/api/setup/status')
+    if (res.ok) {
+      const data = await res.json()
+      if (!data.initialized) {
+        needsSetup.value = true
+        setupChecked.value = true
+        return
+      }
+    }
+  } catch {}
+  setupChecked.value = true
+  needsSetup.value = false
+
   await fetchGlobalConfig()
   if (isLoggedIn.value) await checkAdmin()
+
   messages.push({
     id: ++msgId,
     role: 'system',
@@ -326,4 +349,14 @@ body {
 .el-button--success { --el-button-bg-color: #07c160; --el-button-border-color: #07c160; }
 .el-button--success:hover { --el-button-bg-color: #06ad56; --el-button-border-color: #06ad56; }
 .el-input__wrapper { border-radius: 20px !important; }
+
+.loading-screen {
+  height: 100vh; display: flex; align-items: center; justify-content: center; background: #ededed;
+}
+.loading-spinner {
+  width: 40px; height: 40px; border: 4px solid #e0e0e0;
+  border-top-color: #07c160; border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>

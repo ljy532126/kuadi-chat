@@ -53,12 +53,12 @@
           <div class="form-group">
             <label>UAPI 快递查询密钥</label>
             <el-input v-model="form.uapiKey" type="password" show-password placeholder="在 uapis.cn 获取" size="large" />
-            <span class="hint">配置后用户可直接查询快递，无需自带密钥</span>
+            <span class="hint">在 <a href="https://uapis.cn" target="_blank" class="key-link">uapis.cn</a> 注册获取，用于查询快递物流信息</span>
           </div>
           <div class="form-group">
             <label>DeepSeek AI 密钥</label>
             <el-input v-model="form.deepseekKey" type="password" show-password placeholder="sk-..." size="large" />
-            <span class="hint">配置后可使用 AI 智能对话功能</span>
+            <span class="hint">在 <a href="https://platform.deepseek.com/api_keys" target="_blank" class="key-link">platform.deepseek.com</a> 获取，用于 AI 智能对话</span>
           </div>
           <div class="form-group">
             <el-checkbox v-model="form.enableGlobal">安装后立即启用全局密钥</el-checkbox>
@@ -242,6 +242,8 @@ h2 { font-size: 20px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
 .done-info { margin-top: 8px; }
 .done-info p { color: #333; }
 .err { color: #f56c6c; font-size: 13px; margin-top: 10px; }
+.key-link { color: #07c160; text-decoration: none; font-weight: 500; }
+.key-link:hover { text-decoration: underline; }
 
 /* Footer */
 .wizard-footer {

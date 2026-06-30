@@ -16,12 +16,35 @@
           <p class="subtitle">抖音小友同学出品 · 首次运行配置向导</p>
 
           <div class="form-group">
-            <label>MongoDB 连接地址</label>
-            <el-input v-model="form.mongoUri" placeholder="mongodb://localhost:27017/tracking" size="large" />
-            <span class="hint">使用 Docker 一键部署或填写已有数据库地址</span>
+            <label>MongoDB 主机地址</label>
+            <el-input v-model="form.mongoHost" placeholder="mongo" size="large" />
+            <span class="hint">Docker 部署默认填 <code>mongo</code>，本机安装填 <code>localhost</code></span>
+          </div>
+          <div class="form-group">
+            <label>MongoDB 端口</label>
+            <el-input v-model="form.mongoPort" placeholder="27017" size="large" />
+          </div>
+          <div class="form-group">
+            <label>数据库名</label>
+            <el-input v-model="form.mongoDb" placeholder="tracking" size="large" />
+          </div>
+          <div class="form-row">
+            <div class="form-group half">
+              <label>用户名（可选）</label>
+              <el-input v-model="form.mongoUser" placeholder="留空无认证" size="large" />
+            </div>
+            <div class="form-group half">
+              <label>密码（可选）</label>
+              <el-input v-model="form.mongoPass" type="password" show-password placeholder="留空无认证" size="large" />
+            </div>
           </div>
 
-          <div class="form-group">
+          <div class="test-row">
+            <el-button :loading="testing" @click="testMongo" :disabled="!form.mongoHost">测试数据库连接</el-button>
+            <span v-if="testResult" :class="testResult.ok ? 'test-ok' : 'test-fail'">{{ testResult.msg }}</span>
+          </div>
+
+          <div class="form-group" style="margin-top:16px;">
             <label>JWT 加密密钥</label>
             <el-input v-model="form.jwtSecret" placeholder="留空自动生成随机密钥" size="large" />
             <span class="hint">用于登录令牌加密，建议填写随机字符串</span>
@@ -103,7 +126,11 @@ const steps = [1, 2, 3, 4]
 const stepNames = { 1: '数据库', 2: '管理员', 3: '密钥', 4: '安装' }
 
 const form = reactive({
-  mongoUri: 'mongodb://mongo:27017/tracking',
+  mongoHost: 'mongo',
+  mongoPort: '27017',
+  mongoDb: 'tracking',
+  mongoUser: '',
+  mongoPass: '',
   jwtSecret: '',
   adminEmail: '',
   adminPassword: '',
@@ -117,6 +144,35 @@ const done = ref(false)
 const error = ref('')
 const logs = ref([])
 const logRef = ref(null)
+const testing = ref(false)
+const testResult = ref(null)
+
+function buildMongoUri() {
+  let uri = 'mongodb://'
+  if (form.mongoUser && form.mongoPass) {
+    uri += encodeURIComponent(form.mongoUser) + ':' + encodeURIComponent(form.mongoPass) + '@'
+  }
+  return uri + form.mongoHost + ':' + form.mongoPort + '/' + form.mongoDb
+}
+
+async function testMongo() {
+  testing.value = true
+  testResult.value = null
+  try {
+    const res = await fetch('/api/setup/test-mongo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mongoUri: buildMongoUri() })
+    })
+    const data = await res.json()
+    testResult.value = res.ok
+      ? { ok: true, msg: '连接成功 ✅' }
+      : { ok: false, msg: data.error || '连接失败' }
+  } catch {
+    testResult.value = { ok: false, msg: '网络错误' }
+  }
+  testing.value = false
+}
 
 function addLog(msg) {
   logs.value.push(msg)
@@ -135,6 +191,8 @@ async function doInstall() {
     addLog('已生成随机 JWT 密钥')
   }
 
+  const mongoUri = buildMongoUri()
+
   try {
     addLog('正在创建管理员账号...')
     const res = await fetch('/api/setup', {
@@ -143,7 +201,7 @@ async function doInstall() {
       body: JSON.stringify({
         adminEmail: form.adminEmail,
         adminPassword: form.adminPassword,
-        mongoUri: form.mongoUri,
+        mongoUri,
         jwtSecret: form.jwtSecret,
         uapiKey: form.uapiKey,
         deepseekKey: form.deepseekKey,
@@ -232,6 +290,12 @@ h2 { font-size: 20px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
 }
 .form-group label { font-size: 13px; font-weight: 600; color: #555; display: block; margin-bottom: 4px; }
 .hint { font-size: 11px; color: #bbb; margin-top: 4px; display: block; }
+.hint code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
+.form-row { display: flex; gap: 12px; width: 100%; }
+.form-group.half { flex: 1; }
+.test-row { display: flex; align-items: center; gap: 10px; width: 100%; margin-bottom: 4px; }
+.test-ok { color: #07c160; font-size: 13px; }
+.test-fail { color: #f56c6c; font-size: 13px; }
 
 .install-log {
   background: #1a1a1a; color: #0f0; border-radius: 10px;

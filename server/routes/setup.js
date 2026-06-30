@@ -10,6 +10,26 @@ import { signToken } from '../middleware/auth.js'
 const router = Router()
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// POST /api/setup/test-mongo
+router.post('/test-mongo', async (req, res) => {
+  try {
+    const { mongoUri } = req.body
+    if (!mongoUri) return res.status(400).json({ error: '缺少 MongoDB 连接地址' })
+
+    const mongoose = (await import('mongoose')).default
+    // Try connecting with a 5s timeout
+    const testConn = await mongoose.createConnection(mongoUri, {
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 5000
+    }).asPromise()
+
+    await testConn.close()
+    res.json({ ok: true, message: 'MongoDB 连接成功' })
+  } catch (e) {
+    res.status(400).json({ error: '连接失败: ' + e.message })
+  }
+})
+
 // GET /api/setup/status
 router.get('/status', async (req, res) => {
   try {

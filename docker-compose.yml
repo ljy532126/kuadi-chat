@@ -1,10 +1,20 @@
-version: '3.8'
 services:
-  mongo:
-    image: mongo:7
-    container_name: tracking-mongo
+  app:
+    build: .
+    container_name: tracking-app
     ports:
-      - "27017:27017"
+      - "3014:3014"
+    environment:
+      - PORT=3014
+      - MONGO_URI=mongodb://mongo:27017/tracking
+      - JWT_SECRET=kuaidi2024secure
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+  mongo:
+    image: docker.m.daocloud.io/library/mongo:7
+    container_name: tracking-mongo
     volumes:
       - mongo_data:/data/db
     restart: unless-stopped

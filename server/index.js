@@ -97,13 +97,13 @@ app.use((err, req, res, _next) => {
 })
 
 async function start() {
+  // Try to connect, but don't crash if it fails — setup wizard needs the server running
   try {
-    await mongoose.connect(MONGO_URI)
+    await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 5000 })
     console.log('✅ MongoDB 连接成功')
   } catch (e) {
-    console.error('❌ MongoDB 连接失败:', e.message)
-    console.log('请在 docker-compose.yml 目录运行: docker compose up -d')
-    process.exit(1)
+    console.warn('⚠️ MongoDB 连接失败 (' + e.message + ')，将在安装向导中配置')
+    console.warn('   服务继续运行，打开浏览器进入安装向导')
   }
 
   app.listen(PORT, () => {

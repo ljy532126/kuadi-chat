@@ -4,15 +4,14 @@
       <div class="drawer-panel">
         <div class="drawer-header">
           <h3>⚙️ API 密钥配置</h3>
-          <button class="close-btn" @click="close">
-            <XMarkIcon class="close-icon" />
-          </button>
+          <button class="close-btn" @click="close"><XMarkIcon class="close-icon" /></button>
         </div>
 
         <div class="drawer-body">
           <div v-if="usingGlobal" class="global-notice">
             ⚡ 管理员已配置全局 API Key，所有用户可直接使用。
           </div>
+
           <!-- UAPI -->
           <div class="key-section">
             <div class="section-header">
@@ -21,6 +20,10 @@
             </div>
             <p class="section-desc">用于查询快递物流信息，在 <a href="https://uapis.cn" target="_blank" rel="noopener" class="link">uapis.cn</a> 获取</p>
             <el-input v-model="localUapi" type="password" show-password placeholder="uapi- 前缀自动补全" size="default" clearable />
+            <div class="test-row" v-if="localUapi">
+              <el-button size="small" :loading="testingUapi" @click="testUapi" :disabled="!localUapi.trim()">测试连接</el-button>
+              <span v-if="testUapiResult" :class="testUapiResult.ok ? 'test-ok' : 'test-fail'">{{ testUapiResult.msg }}</span>
+            </div>
           </div>
 
           <div class="divider"></div>
@@ -31,11 +34,11 @@
               <span class="section-title">🤖 DeepSeek AI</span>
               <span class="status-dot" :class="dsOk ? 'ok' : 'miss'"></span>
             </div>
-            <p class="section-desc">配置后可智能对话，AI 自动识别单号、引导操作、解答疑问，在 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener" class="link">platform.deepseek.com</a> 获取</p>
+            <p class="section-desc">配置后可智能对话，在 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener" class="link">platform.deepseek.com</a> 获取</p>
             <el-input v-model="localDeepseek" type="password" show-password placeholder="sk-..." size="default" clearable />
             <div class="test-row" v-if="localDeepseek">
-              <el-button size="small" :loading="testing" @click="testDeepseek" :disabled="!localDeepseek.trim()">测试连接</el-button>
-              <span v-if="testResult" :class="testResult.ok ? 'test-ok' : 'test-fail'">{{ testResult.msg }}</span>
+              <el-button size="small" :loading="testingDs" @click="testDeepseek" :disabled="!localDeepseek.trim()">测试连接</el-button>
+              <span v-if="testDsResult" :class="testDsResult.ok ? 'test-ok' : 'test-fail'">{{ testDsResult.msg }}</span>
             </div>
           </div>
         </div>
@@ -58,14 +61,16 @@ const emit = defineEmits(['save-uapi', 'save-deepseek', 'clear-all', 'update:vis
 
 const localUapi = ref(props.uapiKey)
 const localDeepseek = ref(props.deepseekKey)
-const testing = ref(false)
-const testResult = ref(null)
+const testingUapi = ref(false)
+const testUapiResult = ref(null)
+const testingDs = ref(false)
+const testDsResult = ref(null)
 
 const uapiOk = computed(() => !!localUapi.value)
 const dsOk = computed(() => !!localDeepseek.value)
 
 watch(() => props.visible, v => {
-  if (v) { localUapi.value = props.uapiKey; localDeepseek.value = props.deepseekKey; testResult.value = null }
+  if (v) { localUapi.value = props.uapiKey; localDeepseek.value = props.deepseekKey; testUapiResult.value = null; testDsResult.value = null }
 })
 watch(() => props.uapiKey, v => { localUapi.value = v })
 watch(() => props.deepseekKey, v => { localDeepseek.value = v })
@@ -79,14 +84,38 @@ function handleSave() {
 }
 
 function handleClearAll() {
-  localUapi.value = ''
-  localDeepseek.value = ''
-  testResult.value = null
+  localUapi.value = ''; localDeepseek.value = ''
+  testUapiResult.value = null; testDsResult.value = null
   emit('clear-all')
 }
 
+async function testUapi() {
+  testingUapi.value = true; testUapiResult.value = null
+  try {
+    const key = 'uapi-' + localUapi.value.trim()
+    // Test with a dummy tracking number — we just check if key is valid
+    const url = new URL('/api/v1/misc/tracking/query', window.location.origin)
+    url.searchParams.set('tracking_number', 'JT0000000000')
+    const resp = await fetch(url.toString(), {
+      headers: { 'X-Uapi-Key': 'Bearer ' + key }
+    })
+    if (resp.status === 401 || resp.status === 403) {
+      testUapiResult.value = { ok: false, msg: '密钥无效' }
+    } else if (resp.status === 400) {
+      testUapiResult.value = { ok: true, msg: '连接成功 ✅' }
+    } else if (resp.ok) {
+      testUapiResult.value = { ok: true, msg: '连接成功 ✅' }
+    } else {
+      testUapiResult.value = { ok: false, msg: '状态 ' + resp.status }
+    }
+  } catch {
+    testUapiResult.value = { ok: false, msg: '网络错误' }
+  }
+  testingUapi.value = false
+}
+
 async function testDeepseek() {
-  testing.value = true; testResult.value = null
+  testingDs.value = true; testDsResult.value = null
   try {
     const resp = await fetch('/deepseek/v1/chat/completions', {
       method: 'POST',
@@ -94,36 +123,32 @@ async function testDeepseek() {
         'Content-Type': 'application/json',
         'X-Ds-Key': 'Bearer ' + localDeepseek.value.trim()
       },
-      body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: '你好' }], max_tokens: 10 })
+      body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: 'hi' }], max_tokens: 5 })
     })
-    testResult.value = resp.ok ? { ok: true, msg: '连接成功' } : resp.status === 401 ? { ok: false, msg: '密钥无效' } : resp.status === 402 ? { ok: false, msg: '余额不足' } : { ok: false, msg: '状态 ' + resp.status }
-  } catch { testResult.value = { ok: false, msg: '网络错误' } }
-  testing.value = false
+    if (resp.ok) {
+      testDsResult.value = { ok: true, msg: '连接成功 ✅' }
+    } else if (resp.status === 401) {
+      testDsResult.value = { ok: false, msg: '密钥无效' }
+    } else if (resp.status === 402) {
+      testDsResult.value = { ok: false, msg: '余额不足' }
+    } else {
+      testDsResult.value = { ok: false, msg: '状态 ' + resp.status }
+    }
+  } catch { testDsResult.value = { ok: false, msg: '网络错误' } }
+  testingDs.value = false
 }
 </script>
 
 <style scoped>
-.drawer-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 2000;
-}
-.drawer-panel {
-  position: absolute; top: 0; right: 0; bottom: 0;
-  width: 400px; max-width: 92vw; background: #fff;
-  display: flex; flex-direction: column;
-  box-shadow: -4px 0 24px rgba(0,0,0,0.1);
-}
-
-.drawer-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 20px 24px; border-bottom: 1px solid #f0f0f0;
-}
+.drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 2000; }
+.drawer-panel { position: absolute; top: 0; right: 0; bottom: 0; width: 400px; max-width: 92vw; background: #fff; display: flex; flex-direction: column; box-shadow: -4px 0 24px rgba(0,0,0,0.1); }
+.drawer-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #f0f0f0; }
 .drawer-header h3 { font-size: 18px; font-weight: 700; color: #1a1a1a; }
 .close-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; }
 .close-btn:hover { background: #f5f5f5; }
 .close-icon { width: 20px; height: 20px; color: #999; }
-
 .drawer-body { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
-
+.global-notice { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #92400e; line-height: 1.5; }
 .key-section { display: flex; flex-direction: column; gap: 6px; }
 .section-header { display: flex; align-items: center; gap: 8px; }
 .section-title { font-weight: 600; font-size: 15px; }
@@ -132,24 +157,13 @@ async function testDeepseek() {
 .status-dot.miss { background: #ddd; }
 .section-desc { font-size: 12px; color: #999; }
 .divider { height: 1px; background: #f0f0f0; }
-.test-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.test-row { display: flex; align-items: center; gap: 10px; }
 .test-ok { color: #07c160; font-size: 13px; }
 .test-fail { color: #e6a23c; font-size: 13px; }
-
+.drawer-footer { display: flex; gap: 10px; justify-content: flex-end; padding: 16px 24px; border-top: 1px solid #f0f0f0; }
 .link { color: #07c160; text-decoration: none; font-weight: 500; }
 .link:hover { text-decoration: underline; }
 
-.global-notice {
-  background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
-  padding: 10px 14px; font-size: 13px; color: #92400e; line-height: 1.5;
-}
-
-.drawer-footer {
-  display: flex; gap: 10px; justify-content: flex-end;
-  padding: 16px 24px; border-top: 1px solid #f0f0f0;
-}
-
-/* Transition */
 .drawer-enter-active { transition: opacity 0.25s ease; }
 .drawer-enter-active .drawer-panel { transition: transform 0.3s cubic-bezier(0.22, 0.61, 0.36, 1); }
 .drawer-leave-active { transition: opacity 0.2s ease; }

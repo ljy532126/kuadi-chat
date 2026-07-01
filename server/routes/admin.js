@@ -118,4 +118,25 @@ router.get('/queries/export', authMiddleware, adminMiddleware, async (req, res) 
   } catch { res.status(500).json({ error: '导出失败' }) }
 })
 
+// POST /api/admin/test-uapi — quick API key test (5s timeout)
+router.post('/test-uapi', authMiddleware, adminMiddleware, async (req, res) => {
+  const { key } = req.body
+  if (!key) return res.status(400).json({ error: '缺少密钥' })
+  try {
+    const https = (await import('https')).default
+    const auth = key.startsWith('uapi-') ? 'Bearer ' + key : 'Bearer uapi-' + key
+    const uapiReq = https.get('https://uapis.cn/api/v1/misc/tracking/query?tracking_number=JT0000000000', {
+      headers: { Authorization: auth, Accept: 'application/json' },
+      timeout: 5000
+    }, (proxyRes) => {
+      if (proxyRes.statusCode === 401 || proxyRes.statusCode === 403) {
+        return res.json({ ok: false, msg: '密钥无效 (' + proxyRes.statusCode + ')' })
+      }
+      res.json({ ok: true, msg: '连接成功 (' + proxyRes.statusCode + ')' })
+    })
+    uapiReq.on('timeout', () => { uapiReq.destroy(); res.json({ ok: false, msg: 'UAPI 服务超时，请稍后重试' }) })
+    uapiReq.on('error', () => { res.json({ ok: false, msg: 'UAPI 服务不可达' }) })
+  } catch { res.json({ ok: false, msg: '测试失败' }) }
+})
+
 export default router

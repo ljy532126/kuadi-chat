@@ -184,15 +184,13 @@ async function autoSaveCfg() {
 async function testUapi() {
   testingUapi.value = true; testUapiResult.value = null
   try {
-    const url = new URL('/api/v1/misc/tracking/query', window.location.origin)
-    url.searchParams.set('tracking_number', 'JT0000000000')
-    const resp = await fetch(url.toString(), {
-      headers: {
-        'X-Uapi-Key': 'Bearer ' + cfgUapi.value,
-        'Authorization': 'Bearer ' + props.token
-      }
+    const resp = await fetch('/api/admin/test-uapi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + props.token },
+      body: JSON.stringify({ key: cfgUapi.value })
     })
-    testUapiResult.value = [200, 400, 404].includes(resp.status) ? { ok: true, msg: '连接成功' } : resp.status === 401 || resp.status === 403 ? { ok: false, msg: '密钥无效' } : { ok: false, msg: '状态 ' + resp.status }
+    const data = await resp.json()
+    testUapiResult.value = { ok: data.ok, msg: data.msg || (data.ok ? '连接成功' : '失败') }
   } catch { testUapiResult.value = { ok: false, msg: '网络错误' } }
   testingUapi.value = false
 }

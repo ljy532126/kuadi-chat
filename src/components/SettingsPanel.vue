@@ -9,7 +9,12 @@
 
         <div class="drawer-body">
           <div v-if="usingGlobal" class="global-notice">
-            ⚡ 管理员已配置全局 API Key，所有用户可直接使用。
+            正在使用管理员配置的全局 API Key
+          </div>
+          <div v-else-if="globalEnabledView && !usingGlobal" class="global-notice warn">
+            管理员已开启全局 API，但你的账号未开通全局使用权限。<br>
+            <span v-if="adminContactView">请联系管理员：{{ adminContactView }}<br></span>
+            或自行填写以下密钥。
           </div>
 
           <!-- UAPI -->
@@ -56,7 +61,7 @@
 import { ref, watch, computed } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 
-const props = defineProps({ uapiKey: String, deepseekKey: String, visible: Boolean, usingGlobal: Boolean })
+const props = defineProps({ uapiKey: String, deepseekKey: String, visible: Boolean, usingGlobal: Boolean, globalEnabledView: Boolean, adminContactView: String })
 const emit = defineEmits(['save-uapi', 'save-deepseek', 'clear-all', 'update:visible'])
 
 const localUapi = ref(props.uapiKey)
@@ -149,6 +154,7 @@ async function testDeepseek() {
 .close-icon { width: 20px; height: 20px; color: #999; }
 .drawer-body { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
 .global-notice { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #92400e; line-height: 1.5; }
+.global-notice.warn { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
 .key-section { display: flex; flex-direction: column; gap: 6px; }
 .section-header { display: flex; align-items: center; gap: 8px; }
 .section-title { font-weight: 600; font-size: 15px; }

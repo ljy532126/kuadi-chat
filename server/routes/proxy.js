@@ -11,9 +11,14 @@ const router = Router()
 async function resolveUapiKey(req) {
   if (req.headers['x-use-global'] === '1') {
     const cfg = await GlobalConfig.findById('global').lean()
-    if (cfg && cfg.enabled && cfg.uapiKey) {
-      return 'Bearer ' + (cfg.uapiKey.startsWith('uapi-') ? cfg.uapiKey : 'uapi-' + cfg.uapiKey)
+    if (!cfg || !cfg.enabled || !cfg.uapiKey) return null
+    // Check per-user permission
+    const userId = req._userId
+    if (userId) {
+      const user = await User.findById(userId).select('useGlobal').catch(() => null)
+      if (!user || !user.useGlobal) return null
     }
+    return 'Bearer ' + (cfg.uapiKey.startsWith('uapi-') ? cfg.uapiKey : 'uapi-' + cfg.uapiKey)
   }
   return req.headers['x-uapi-key'] || ''
 }
@@ -21,7 +26,13 @@ async function resolveUapiKey(req) {
 async function resolveDsKey(req) {
   if (req.headers['x-use-global'] === '1') {
     const cfg = await GlobalConfig.findById('global').lean()
-    if (cfg && cfg.enabled && cfg.deepseekKey) return 'Bearer ' + cfg.deepseekKey
+    if (!cfg || !cfg.enabled || !cfg.deepseekKey) return null
+    const userId = req._userId
+    if (userId) {
+      const user = await User.findById(userId).select('useGlobal').catch(() => null)
+      if (!user || !user.useGlobal) return null
+    }
+    return 'Bearer ' + cfg.deepseekKey
   }
   return req.headers['x-ds-key'] || ''
 }
@@ -41,7 +52,7 @@ router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, async (req, res) 
   const header = req.headers.authorization
   let isAuth = false
   if (header && header.startsWith('Bearer ')) {
-    try { verifyToken(header.slice(7)); isAuth = true } catch {}
+    try { const p = verifyToken(header.slice(7)); req._userId = p.userId; isAuth = true } catch {}
   }
 
   if (!isAuth) {

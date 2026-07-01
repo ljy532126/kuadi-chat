@@ -5,6 +5,8 @@ const KEYS = { uapi: 'uapi_key', deepseek: 'deepseek_key' }
 const globalEnabled = ref(false)
 const globalHasUapi = ref(false)
 const globalHasDeepseek = ref(false)
+const userUseGlobal = ref(false)
+const adminContact = ref('')
 
 export function useApiKey() {
   const keys = reactive({ uapi: '', deepseek: '' })
@@ -27,8 +29,20 @@ export function useApiKey() {
         globalEnabled.value = data.enabled
         globalHasUapi.value = data.hasUapi
         globalHasDeepseek.value = data.hasDeepseek
+        adminContact.value = data.adminContact || ''
       }
     } catch {}
+  }
+
+  async function fetchUserGlobal(authToken) {
+    if (!authToken) { userUseGlobal.value = false; return }
+    try {
+      const res = await fetch('/api/admin/me', { headers: { Authorization: 'Bearer ' + authToken } })
+      if (res.ok) {
+        const data = await res.json()
+        userUseGlobal.value = !!data.useGlobal
+      }
+    } catch { userUseGlobal.value = false }
   }
 
   function saveUapi(raw) {
@@ -37,9 +51,8 @@ export function useApiKey() {
   }
 
   function saveDeepseek(raw) {
-    const key = raw.trim()
-    keys.deepseek = key
-    try { localStorage.setItem(KEYS.deepseek, key) } catch {}
+    keys.deepseek = raw.trim()
+    try { localStorage.setItem(KEYS.deepseek, keys.deepseek) } catch {}
   }
 
   function clearUapi() { keys.uapi = ''; try { localStorage.removeItem(KEYS.uapi) } catch {} }
@@ -47,14 +60,20 @@ export function useApiKey() {
 
   load()
 
-  const hasUapi = computed(() => globalEnabled.value ? globalHasUapi.value : !!keys.uapi)
-  const hasDeepseek = computed(() => globalEnabled.value ? globalHasDeepseek.value : !!keys.deepseek)
-  const usingGlobal = computed(() => globalEnabled.value && (globalHasUapi.value || globalHasDeepseek.value))
+  const hasUapi = computed(() => {
+    if (globalEnabled.value && userUseGlobal.value) return globalHasUapi.value
+    return !!keys.uapi
+  })
+  const hasDeepseek = computed(() => {
+    if (globalEnabled.value && userUseGlobal.value) return globalHasDeepseek.value
+    return !!keys.deepseek
+  })
+  const usingGlobal = computed(() => globalEnabled.value && userUseGlobal.value && (globalHasUapi.value || globalHasDeepseek.value))
 
   return {
-    keys, globalEnabled, globalHasUapi, globalHasDeepseek,
+    keys, globalEnabled, userUseGlobal, adminContact,
     hasUapi, hasDeepseek, usingGlobal,
     saveUapi, saveDeepseek, clearUapi, clearDeepseek,
-    fetchGlobalConfig, load
+    fetchGlobalConfig, fetchUserGlobal, load
   }
 }

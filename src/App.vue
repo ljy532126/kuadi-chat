@@ -23,6 +23,8 @@
       :deepseekKey="keys.deepseek"
       :visible="showSettings"
       :usingGlobal="usingGlobal"
+      :globalEnabledView="globalEnabled"
+      :adminContactView="adminContact"
       @save-uapi="handleSaveUapi"
       @save-deepseek="handleSaveDeepseek"
       @clear-all="handleClearAll"
@@ -88,7 +90,7 @@ import { copyText, captureTrackingResult } from './composables/useClipboard.js'
 import { parseInput } from './utils/parseInput.js'
 import { sanitizeText } from './utils/sanitize.js'
 
-const { keys, globalEnabled, globalHasUapi, globalHasDeepseek, hasUapi, hasDeepseek, usingGlobal, saveUapi, saveDeepseek, clearUapi, clearDeepseek, fetchGlobalConfig } = useApiKey()
+const { keys, globalEnabled, userUseGlobal, adminContact, hasUapi, hasDeepseek, usingGlobal, saveUapi, saveDeepseek, clearUapi, clearDeepseek, fetchGlobalConfig, fetchUserGlobal } = useApiKey()
 const { token, email, isAdmin, isLoggedIn, logout, checkAdmin } = useAuth()
 const { avatar: userAvatar, saveAvatar, clearAvatar } = useAvatar()
 const { stats, trackQuery, clearStats: resetStats } = useStats()
@@ -191,16 +193,22 @@ async function handleSend(text) {
   messages.push({ id: ++msgId, role: 'user', type: 'text', text: sanitizeText(text) })
 
   if (!hasUapi.value) {
-    // Global config might not have loaded yet — try again
     await fetchGlobalConfig()
     if (!hasUapi.value) {
-      messages.push({
-        id: ++msgId, role: 'system', type: 'warn',
-        text: usingGlobal.value
-          ? '全局 API 服务暂不可用，请联系管理员检查配置。'
-          : '请先设置 API 密钥才能查询。点击右上角 ⚙️ 进入配置页面。'
-      })
-      if (!usingGlobal.value) showSettings.value = true
+      // Global is enabled on system level but user's useGlobal is off
+      let msg = ''
+      if (globalEnabled.value && !userUseGlobal.value) {
+        msg = '管理员开启了全局 API，但你的账号尚未开通全局使用权限。'
+        if (adminContact.value) {
+          msg += '<br><br>请联系管理员开通：<b>' + adminContact.value.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</b>'
+        }
+        msg += '<br><br>或者自行配置 API 密钥：点击右上角设置图标。'
+      } else if (globalEnabled.value && !globalHasUapi.value) {
+        msg = '全局 API 服务暂不可用，请联系管理员检查配置。'
+      } else {
+        msg = '请先设置 API 密钥才能查询。点击右上角设置图标进入配置页面。'
+      }
+      messages.push({ id: ++msgId, role: 'system', type: 'warn', text: msg })
       isQuerying.value = false
       return
     }
@@ -327,6 +335,7 @@ onMounted(async () => {
   needsSetup.value = false
 
   await fetchGlobalConfig()
+  await fetchUserGlobal(token.value)
   if (isLoggedIn.value) await checkAdmin()
 
   // Heartbeat every 60s for online tracking

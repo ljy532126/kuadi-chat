@@ -19,7 +19,7 @@
             <div class="toggle-row">
               <div>
                 <span class="toggle-label">启用全局 API Key</span>
-                <p class="toggle-desc">开启后所有用户直接使用管理员配置的密钥</p>
+                <p class="toggle-desc">开启后管理员可为指定用户开通全局使用权限</p>
               </div>
               <el-switch v-model="cfgEnabled" @change="autoSaveCfg" />
             </div>
@@ -43,10 +43,24 @@
                 <span v-if="testDsResult" :class="testDsResult.ok ? 'test-ok' : 'test-fail'">{{ testDsResult.msg }}</span>
               </div>
             </div>
+            <div class="divider"></div>
+
+            <div class="key-section">
+              <div class="section-header"><span class="section-title">管理员联系方式</span></div>
+              <el-input v-model="cfgContact" placeholder="微信/QQ/邮箱，用户求助时显示" size="default" clearable @change="autoSaveCfg" />
+              <span class="hint">用户无法使用全局密钥时会看到此联系方式</span>
+            </div>
           </div>
 
           <!-- Users Tab -->
           <div v-if="tab === 'users'" class="tab-panel">
+            <div class="search-bar">
+              <el-input v-model="userSearch" placeholder="搜索邮箱..." size="default" clearable @input="onUserSearch" class="search-input">
+                <template #prefix>
+                  <MagnifyingGlassIcon class="search-icon" />
+                </template>
+              </el-input>
+            </div>
             <div v-if="loadingUsers" class="loading">加载中...</div>
             <div v-else class="user-list">
               <div v-for="u in users" :key="u._id" class="user-row">
@@ -58,6 +72,10 @@
                 <div class="user-meta">
                   <span>注册: {{ fmtDate(u.createdAt) }}</span>
                   <span>活跃: {{ fmtDate(u.lastActive) }}</span>
+                </div>
+                <div class="user-row-actions">
+                  <span class="global-label">使用全局</span>
+                  <el-switch v-model="u.useGlobal" size="small" @change="toggleUserGlobal(u)" />
                 </div>
               </div>
               <p v-if="users.length === 0" class="empty">暂无注册用户</p>
@@ -90,7 +108,7 @@
 
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { XMarkIcon } from '@heroicons/vue/24/outline'
+import { XMarkIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
 
 const props = defineProps({ modelValue: Boolean, token: String })
 const emit = defineEmits(['update:modelValue', 'saved'])
@@ -101,26 +119,15 @@ watch(visible, v => emit('update:modelValue', v))
 
 const tab = ref('config')
 
-// Config
-const cfgEnabled = ref(false)
-const cfgUapi = ref('')
-const cfgDs = ref('')
-const testingUapi = ref(false)
-const testUapiResult = ref(null)
-const testingDs = ref(false)
-const testDsResult = ref(null)
+const cfgEnabled = ref(false); const cfgUapi = ref(''); const cfgDs = ref(''); const cfgContact = ref('')
+const testingUapi = ref(false); const testUapiResult = ref(null)
+const testingDs = ref(false); const testDsResult = ref(null)
 const configLoaded = ref(false)
 let saveTimer = null
 
-// Users
-const users = ref([])
-const loadingUsers = ref(false)
-
-// Queries
-const queries = ref([])
-const loadingQueries = ref(false)
-
-let heartbeatTimer = null
+const users = ref([]); const loadingUsers = ref(false); const userSearch = ref('')
+const queries = ref([]); const loadingQueries = ref(false)
+let heartbeatTimer = null; let searchTimer = null
 
 function close() { visible.value = false }
 
@@ -138,7 +145,8 @@ watch(visible, async (v) => {
       const res = await fetch('/api/admin/config/full', { headers: { Authorization: 'Bearer ' + props.token } })
       if (res.ok) {
         const d = await res.json()
-        cfgEnabled.value = d.enabled; cfgUapi.value = d.uapiKey || ''; cfgDs.value = d.deepseekKey || ''
+        cfgEnabled.value = d.enabled; cfgUapi.value = d.uapiKey || ''
+        cfgDs.value = d.deepseekKey || ''; cfgContact.value = d.adminContact || ''
         configLoaded.value = true
       }
     } catch {}
@@ -160,7 +168,7 @@ async function autoSaveCfg() {
       await fetch('/api/admin/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + props.token },
-        body: JSON.stringify({ enabled: cfgEnabled.value, uapiKey: cfgUapi.value, deepseekKey: cfgDs.value })
+        body: JSON.stringify({ enabled: cfgEnabled.value, uapiKey: cfgUapi.value, deepseekKey: cfgDs.value, adminContact: cfgContact.value })
       })
       emit('saved')
     } catch {}
@@ -172,15 +180,9 @@ async function testUapi() {
   try {
     const url = new URL('/api/v1/misc/tracking/query', window.location.origin)
     url.searchParams.set('tracking_number', 'JT0000000000')
-    const resp = await fetch(url.toString(), {
-      headers: { 'X-Uapi-Key': 'Bearer ' + cfgUapi.value, 'X-Use-Global': '1' }
-    })
-    if (resp.status === 401 || resp.status === 403) testUapiResult.value = { ok: false, msg: '密钥无效' }
-    else if (resp.status === 200 || resp.status === 400 || resp.status === 404) testUapiResult.value = { ok: true, msg: '连接成功' }
-    else testUapiResult.value = { ok: false, msg: '状态 ' + resp.status }
-  } catch {
-    testUapiResult.value = { ok: false, msg: '网络错误' }
-  }
+    const resp = await fetch(url.toString(), { headers: { 'X-Uapi-Key': 'Bearer ' + cfgUapi.value, 'X-Use-Global': '1' } })
+    testUapiResult.value = [200, 400, 404].includes(resp.status) ? { ok: true, msg: '连接成功' } : resp.status === 401 || resp.status === 403 ? { ok: false, msg: '密钥无效' } : { ok: false, msg: '状态 ' + resp.status }
+  } catch { testUapiResult.value = { ok: false, msg: '网络错误' } }
   testingUapi.value = false
 }
 
@@ -192,10 +194,7 @@ async function testDs() {
       headers: { 'Content-Type': 'application/json', 'X-Ds-Key': 'Bearer ' + cfgDs.value, 'X-Use-Global': '1' },
       body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: 'hi' }], max_tokens: 5 })
     })
-    if (resp.ok) testDsResult.value = { ok: true, msg: '连接成功' }
-    else if (resp.status === 401) testDsResult.value = { ok: false, msg: '密钥无效' }
-    else if (resp.status === 402) testDsResult.value = { ok: false, msg: '余额不足' }
-    else testDsResult.value = { ok: false, msg: '状态 ' + resp.status }
+    testDsResult.value = resp.ok ? { ok: true, msg: '连接成功' } : resp.status === 401 ? { ok: false, msg: '密钥无效' } : resp.status === 402 ? { ok: false, msg: '余额不足' } : { ok: false, msg: '状态 ' + resp.status }
   } catch { testDsResult.value = { ok: false, msg: '网络错误' } }
   testingDs.value = false
 }
@@ -203,10 +202,26 @@ async function testDs() {
 async function loadUsers() {
   loadingUsers.value = true
   try {
-    const res = await fetch('/api/admin/users', { headers: { Authorization: 'Bearer ' + props.token } })
+    const q = userSearch.value ? '?search=' + encodeURIComponent(userSearch.value) : ''
+    const res = await fetch('/api/admin/users' + q, { headers: { Authorization: 'Bearer ' + props.token } })
     if (res.ok) users.value = await res.json()
   } catch {}
   loadingUsers.value = false
+}
+
+function onUserSearch() {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(loadUsers, 300)
+}
+
+async function toggleUserGlobal(u) {
+  try {
+    await fetch('/api/admin/users/' + u._id + '/global', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + props.token },
+      body: JSON.stringify({ useGlobal: u.useGlobal })
+    })
+  } catch { u.useGlobal = !u.useGlobal } // revert on error
 }
 
 async function loadQueries() {
@@ -233,7 +248,6 @@ function fmtDate(d) {
 .close-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; }
 .close-btn:hover { background: #f5f5f5; }
 .close-icon { width: 20px; height: 20px; color: #999; }
-
 .drawer-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
 
 .tabs { display: flex; border-bottom: 2px solid #f0f0f0; flex-shrink: 0; padding: 0 16px; }
@@ -255,10 +269,14 @@ function fmtDate(d) {
 .section-title { font-weight: 600; font-size: 15px; }
 .divider { height: 1px; background: #f0f0f0; }
 .loading { text-align: center; color: #999; padding: 20px; }
+.hint { font-size: 10px; color: #bbb; margin-top: 2px; }
 
 .test-row { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
 .test-ok { color: #07c160; font-size: 12px; }
 .test-fail { color: #e6a23c; font-size: 12px; }
+
+.search-bar { margin-bottom: 4px; }
+.search-icon { width: 16px; height: 16px; color: #bbb; }
 
 .user-list { display: flex; flex-direction: column; gap: 2px; }
 .user-row { padding: 10px 0; border-bottom: 1px solid #f5f5f5; }
@@ -270,7 +288,9 @@ function fmtDate(d) {
 .user-email { font-size: 14px; color: #333; font-weight: 500; }
 .badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 600; }
 .admin-badge { background: #e8f5e9; color: #07c160; }
-.user-meta { display: flex; gap: 12px; font-size: 11px; color: #bbb; }
+.user-meta { display: flex; gap: 12px; font-size: 11px; color: #bbb; margin-top: 2px; }
+.user-row-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.global-label { font-size: 12px; color: #999; }
 
 .query-list { display: flex; flex-direction: column; gap: 2px; }
 .query-row { padding: 10px 0; border-bottom: 1px solid #f5f5f5; }

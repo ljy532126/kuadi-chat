@@ -11,6 +11,9 @@ const userSchema = new mongoose.Schema({
   role: {
     type: String, enum: ['user', 'admin'], default: 'user'
   },
+  useGlobal: {
+    type: Boolean, default: false
+  },
   lastActive: {
     type: Date, default: Date.now
   },

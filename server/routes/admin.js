@@ -5,29 +5,34 @@ import QueryLog from '../models/QueryLog.js'
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js'
 
 const router = Router()
-const ONLINE_THRESHOLD = 5 * 60 * 1000 // 5 min
+const ONLINE_THRESHOLD = 5 * 60 * 1000
 
 // ---- Public ----
 
-// GET /api/admin/config
+// GET /api/admin/config — public, returns global status + adminContact
 router.get('/config', async (req, res) => {
   try {
     let cfg = await GlobalConfig.findById('global').lean()
-    if (!cfg) cfg = { _id: 'global', uapiKey: '', deepseekKey: '', enabled: false }
-    res.json({ enabled: cfg.enabled, hasUapi: cfg.enabled && !!cfg.uapiKey, hasDeepseek: cfg.enabled && !!cfg.deepseekKey })
+    if (!cfg) cfg = { _id: 'global', uapiKey: '', deepseekKey: '', enabled: false, adminContact: '' }
+    res.json({
+      enabled: cfg.enabled,
+      hasUapi: cfg.enabled && !!cfg.uapiKey,
+      hasDeepseek: cfg.enabled && !!cfg.deepseekKey,
+      adminContact: cfg.adminContact || ''
+    })
   } catch { res.status(500).json({ error: '获取配置失败' }) }
 })
 
-// GET /api/admin/me
+// GET /api/admin/me — returns role + useGlobal flag
 router.get('/me', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.userId).select('role email')
+    const user = await User.findById(req.userId).select('role email useGlobal')
     if (!user) return res.status(404).json({ error: '用户不存在' })
-    res.json({ role: user.role, email: user.email })
+    res.json({ role: user.role, email: user.email, useGlobal: user.useGlobal || false })
   } catch { res.status(500).json({ error: '获取信息失败' }) }
 })
 
-// POST /api/admin/heartbeat — update lastActive
+// POST /api/admin/heartbeat
 router.post('/heartbeat', authMiddleware, async (req, res) => {
   try {
     await User.findByIdAndUpdate(req.userId, { $set: { lastActive: new Date() } })
@@ -41,7 +46,7 @@ router.post('/heartbeat', authMiddleware, async (req, res) => {
 router.get('/config/full', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     let cfg = await GlobalConfig.findById('global').lean()
-    if (!cfg) cfg = await GlobalConfig.create({ _id: 'global', uapiKey: '', deepseekKey: '', enabled: false })
+    if (!cfg) cfg = await GlobalConfig.create({ _id: 'global', uapiKey: '', deepseekKey: '', enabled: false, adminContact: '' })
     res.json(cfg)
   } catch { res.status(500).json({ error: '获取配置失败' }) }
 })
@@ -49,34 +54,43 @@ router.get('/config/full', authMiddleware, adminMiddleware, async (req, res) => 
 // PUT /api/admin/config
 router.put('/config', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { uapiKey, deepseekKey, enabled } = req.body
+    const { uapiKey, deepseekKey, enabled, adminContact } = req.body
     const update = {}
     if (uapiKey !== undefined) update.uapiKey = String(uapiKey).trim()
     if (deepseekKey !== undefined) update.deepseekKey = String(deepseekKey).trim()
     if (enabled !== undefined) update.enabled = !!enabled
+    if (adminContact !== undefined) update.adminContact = String(adminContact).trim()
     const cfg = await GlobalConfig.findByIdAndUpdate('global', { $set: update }, { upsert: true, new: true })
     res.json(cfg)
   } catch { res.status(500).json({ error: '保存配置失败' }) }
 })
 
-// GET /api/admin/users — list all users with online status
+// GET /api/admin/users — with search
 router.get('/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const users = await User.find({}).select('email role lastActive createdAt').sort({ createdAt: -1 }).lean()
+    const search = (req.query.search || '').trim()
+    const filter = search ? { email: { $regex: search, $options: 'i' } } : {}
+    const users = await User.find(filter).select('email role useGlobal lastActive createdAt').sort({ createdAt: -1 }).lean()
     const now = Date.now()
     const data = users.map(u => ({
-      _id: u._id,
-      email: u.email,
-      role: u.role,
-      createdAt: u.createdAt,
-      lastActive: u.lastActive,
+      _id: u._id, email: u.email, role: u.role, useGlobal: u.useGlobal || false,
+      createdAt: u.createdAt, lastActive: u.lastActive,
       online: (now - new Date(u.lastActive).getTime()) < ONLINE_THRESHOLD
     }))
     res.json(data)
   } catch { res.status(500).json({ error: '获取用户失败' }) }
 })
 
-// GET /api/admin/queries — recent query logs
+// PUT /api/admin/users/:id/global — toggle per-user global
+router.put('/users/:id/global', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { useGlobal } = req.body
+    await User.findByIdAndUpdate(req.params.id, { $set: { useGlobal: !!useGlobal } })
+    res.json({ ok: true })
+  } catch { res.status(500).json({ error: '更新失败' }) }
+})
+
+// GET /api/admin/queries
 router.get('/queries', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 200)

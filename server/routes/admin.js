@@ -131,13 +131,14 @@ router.post('/test-uapi', authMiddleware, adminMiddleware, async (req, res) => {
       timeout: 5000,
       agent: directAgent
     }, (proxyRes) => {
+      if (res.writableEnded) return
       if (proxyRes.statusCode === 401 || proxyRes.statusCode === 403) {
         return res.json({ ok: false, msg: '密钥无效 (' + proxyRes.statusCode + ')' })
       }
       res.json({ ok: true, msg: '连接成功 (' + proxyRes.statusCode + ')' })
     })
-    uapiReq.on('timeout', () => { uapiReq.destroy(); res.json({ ok: false, msg: 'UAPI 服务超时，请稍后重试' }) })
-    uapiReq.on('error', () => { res.json({ ok: false, msg: 'UAPI 服务不可达' }) })
+    uapiReq.on('timeout', () => { uapiReq.destroy(); if (!res.writableEnded) res.json({ ok: false, msg: 'UAPI 服务超时，请稍后重试' }) })
+    uapiReq.on('error', () => { if (!res.writableEnded) res.json({ ok: false, msg: 'UAPI 服务不可达' }) })
   } catch { res.json({ ok: false, msg: '测试失败' }) }
 })
 

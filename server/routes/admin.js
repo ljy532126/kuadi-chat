@@ -124,12 +124,10 @@ router.post('/test-uapi', authMiddleware, adminMiddleware, async (req, res) => {
   if (!key) return res.status(400).json({ error: '缺少密钥' })
   try {
     const https = (await import('https')).default
-    const directAgent = new https.Agent({ keepAlive: true })
     const auth = key.startsWith('uapi-') ? 'Bearer ' + key : 'Bearer uapi-' + key
     const uapiReq = https.get('https://uapis.cn/api/v1/misc/tracking/query?tracking_number=JT0000000000', {
       headers: { Authorization: auth, Accept: 'application/json' },
-      timeout: 5000,
-      agent: directAgent
+      timeout: 5000
     }, (proxyRes) => {
       if (res.writableEnded) return
       if (proxyRes.statusCode === 401 || proxyRes.statusCode === 403) {

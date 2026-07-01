@@ -1,6 +1,5 @@
 import { Router } from 'express'
 import https from 'https'
-import http from 'http'
 import { verifyToken } from '../middleware/auth.js'
 import { rateLimitMiddleware, consumeFreeQuery, getFreeQuota } from '../middleware/rateLimit.js'
 import GlobalConfig from '../models/GlobalConfig.js'
@@ -9,9 +8,6 @@ import User from '../models/User.js'
 
 const router = Router()
 const RETRIES = 2
-
-// Agent that ignores system proxy — UAPI/DeepSeek must be reached directly
-const directAgent = new https.Agent({ keepAlive: true, rejectUnauthorized: true })
 
 async function resolveUapiKey(req) {
   if (req.headers['x-use-global'] === '1') {
@@ -104,8 +100,7 @@ router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, async (req, res) 
 
     const uapiReq = https.get(targetUrl, {
       headers: { 'Authorization': uapiKey, 'Accept': 'application/json' },
-      timeout: 6000,
-      agent: directAgent
+      timeout: 6000
     }, async (proxyRes) => {
       let body = ''
       proxyRes.on('data', chunk => body += chunk)
@@ -172,8 +167,7 @@ router.post('/deepseek/v1/chat/completions', async (req, res) => {
     const proxy = https.request('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(bodyString)), 'Authorization': dsKey },
-      timeout: 15000,
-      agent: directAgent
+      timeout: 15000
     }, (proxyRes) => { res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json' }); proxyRes.pipe(res) })
     proxy.on('timeout', () => { proxy.destroy(); if (!res.writableEnded) res.status(504).json({ code: 'UPSTREAM_TIMEOUT', message: 'AI 服务响应超时' }) })
     proxy.on('error', (e) => { console.error('DS error:', e.message); if (!res.writableEnded) res.status(502).json({ code: 'UPSTREAM_ERROR', message: 'AI 连接失败' }) })

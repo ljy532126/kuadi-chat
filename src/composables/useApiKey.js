@@ -71,7 +71,7 @@ export function useApiKey() {
   const usingGlobal = computed(() => globalEnabled.value && userUseGlobal.value && (globalHasUapi.value || globalHasDeepseek.value))
 
   return {
-    keys, globalEnabled, userUseGlobal, adminContact,
+    keys, globalEnabled, globalHasUapi, globalHasDeepseek, userUseGlobal, adminContact,
     hasUapi, hasDeepseek, usingGlobal,
     saveUapi, saveDeepseek, clearUapi, clearDeepseek,
     fetchGlobalConfig, fetchUserGlobal, load

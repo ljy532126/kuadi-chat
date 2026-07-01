@@ -19,8 +19,10 @@ const app = express()
 
 // ---- Security middleware ----
 app.use(helmet({
-  contentSecurityPolicy: false,  // allow inline scripts for SPA
-  crossOriginEmbedderPolicy: false
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false,
+  originAgentCluster: false
 }))
 
 app.use(cors({

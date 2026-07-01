@@ -226,33 +226,44 @@ async function handleSend(text) {
     const thinkMsg = messages[thinkingIdx]
     if (dsResult.error) {
       thinkMsg.type = 'error'
-      thinkMsg.text = '🤖 AI 回复失败：' + dsResult.message
+      thinkMsg.text = 'AI 回复失败：' + dsResult.message
     } else {
-      thinkMsg.type = 'text'
-      thinkMsg.text = sanitizeText(dsResult.content)
+      // Try to extract JSON tracking-number from AI response
+      let aiTracking = null
+      const jsonMatch = dsResult.content.match(/\{"action":"query"[^}]*\}/)
+      if (jsonMatch) {
+        try {
+          aiTracking = JSON.parse(jsonMatch[0])
+          // Strip JSON from displayed text
+          const displayText = dsResult.content.replace(jsonMatch[0], '').trim()
+          thinkMsg.text = sanitizeText(displayText || '正在为您查询...')
+        } catch { thinkMsg.text = sanitizeText(dsResult.content) }
+      } else {
+        thinkMsg.text = sanitizeText(dsResult.content)
+      }
       thinkMsg.copyText = dsResult.content
+      thinkMsg.type = 'text'
       chatHistory.push({ role: 'user', content: text })
       chatHistory.push({ role: 'assistant', content: dsResult.content })
       if (chatHistory.length > 12) chatHistory.splice(0, 2)
-    }
 
-    if (parsed && parsed.type === 'query') {
-      const trackIdx = messages.length
-      messages.push({ id: ++msgId, role: 'system', type: 'thinking' })
-
-      const result = await queryTracking(keys.uapi, parsed, token.value, usingGlobal.value)
-      const trackMsg = messages[trackIdx]
-
-      if (result.error) {
-        trackMsg.type = result.status === 404 ? 'warn' : 'error'
-        trackMsg.text = getErrorMessage(result.status, result.message, result.code)
-        trackQuery('failed')
-      } else {
-        trackMsg.type = 'tracking'
-        trackMsg.data = result.data
-        trackMsg.copyText = buildTrackingText(result.data)
-        trackQuery('success', result.data.carrier_name || '')
-        if (result.free_queries_left !== undefined) freeQueriesLeft.value = result.free_queries_left
+      // Auto-query from AI-identified tracking number
+      if (aiTracking && aiTracking.trackingNumber) {
+        const trackIdx2 = messages.length
+        messages.push({ id: ++msgId, role: 'system', type: 'thinking' })
+        const aiResult = await queryTracking(keys.uapi, { tracking_number: aiTracking.trackingNumber, carrier_code: aiTracking.carrierCode || '', phone: aiTracking.phone || '' }, token.value, usingGlobal.value)
+        const trackMsg2 = messages[trackIdx2]
+        if (aiResult.error) {
+          trackMsg2.type = (aiResult.status === 404 || aiResult.code === 'free_quota_exhausted') ? 'warn' : 'error'
+          trackMsg2.text = getErrorMessage(aiResult.status, aiResult.message, aiResult.code)
+          trackQuery('failed')
+        } else {
+          trackMsg2.type = 'tracking'
+          trackMsg2.data = aiResult.data
+          trackMsg2.copyText = buildTrackingText(aiResult.data)
+          trackQuery('success', aiResult.data.carrier_name || '')
+          if (aiResult.free_queries_left !== undefined) freeQueriesLeft.value = aiResult.free_queries_left
+        }
       }
     }
 
@@ -260,7 +271,7 @@ async function handleSend(text) {
     return
   }
 
-  // No DeepSeek: static mode
+  // No DeepSeek: static mode — use parseInput to find tracking number
   if (parsed && parsed.type === 'help') {
     messages.push({ id: ++msgId, role: 'system', type: 'text', text: HELP_TEXT })
     isQuerying.value = false

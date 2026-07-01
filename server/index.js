@@ -67,21 +67,56 @@ app.get('/api/health', (req, res) => {
 // Proxy routes (UAPI + DeepSeek + quota check)
 app.use('/', proxyRoutes)
 
-// Serve Vite dist in production — short cache for HTML, long for assets
+// ---- Anti-cache middleware for all API responses ----
+// Cloudflare respects Cache-Control headers by default. Setting no-store
+// tells Cloudflare to bypass its edge cache entirely for these responses.
+app.use((req, res, next) => {
+  // API routes must never be cached — they return dynamic data
+  if (req.url.startsWith('/api/') || req.url.startsWith('/deepseek/')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+    // Cloudflare-specific: force bypass
+    res.setHeader('CDN-Cache-Control', 'no-store')
+  }
+  next()
+})
+
+// ---- Static files with per-type cache policy ----
+// Vite generates content-hashed filenames (e.g. index-H9HibSo_.js).
+// Hashed assets can be cached long-term — a code change produces a new hash.
+// HTML must never be cached — it's the SPA shell that links to hashed assets.
 const distPath = path.resolve(__dirname, '..', 'dist')
 app.use(express.static(distPath, {
-  maxAge: '1h',  // short cache to prevent Cloudflare from holding stale assets
   setHeaders(res, filePath) {
+    // No-CDN-cache is the top priority
+    res.setHeader('CDN-Cache-Control', 'no-store')
+
     if (filePath.endsWith('.html')) {
-      // Never cache index.html — always get latest frontend
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+      // SPA entry point: aggressive no-cache — forces Cloudflare + browser
+      // to fetch fresh HTML on every request
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0')
       res.setHeader('Pragma', 'no-cache')
       res.setHeader('Expires', '0')
+    } else if (/\.(js|css|woff2?|png|svg|ico)$/.test(filePath)) {
+      // Hashed assets: cached 1 year — a code change produces new hash,
+      // so stale cache is never served
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    } else {
+      // Other static files: short cache
+      res.setHeader('Cache-Control', 'public, max-age=3600')
     }
   }
 }))
+
+// SPA fallback — serve index.html for all non-API non-file routes.
+// This must also carry no-cache headers.
 app.get('*', (req, res, next) => {
   if (req.url.startsWith('/api/') || req.url.startsWith('/deepseek/')) return next()
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+  res.setHeader('CDN-Cache-Control', 'no-store')
   res.sendFile(path.join(distPath, 'index.html'), err => {
     if (err) res.status(404).json({ error: 'Not found' })
   })

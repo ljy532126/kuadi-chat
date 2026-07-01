@@ -29,18 +29,23 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
 import { PaperAirplaneIcon } from '@heroicons/vue/24/solid'
 
-defineProps({ disabled: Boolean, quotaLeft: Number, isLoggedIn: Boolean })
+const props = defineProps({ disabled: Boolean, quotaLeft: Number, isLoggedIn: Boolean })
 const emit = defineEmits(['send'])
 
 const text = ref('')
 const inputRef = ref(null)
 
-onMounted(() => {
+function focusInput() {
   nextTick(() => inputRef.value?.focus())
-})
+}
+
+onMounted(focusInput)
+
+// Auto re-focus after query finishes
+watch(() => props.disabled, (v) => { if (!v) focusInput() })
 
 function handleSend() {
   const val = text.value.trim()

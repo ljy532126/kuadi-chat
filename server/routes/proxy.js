@@ -97,7 +97,7 @@ router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, async (req, res) 
 
   const uapiReq = https.get(targetUrl, {
     headers: { 'Authorization': uapiKey, 'Accept': 'application/json' },
-    timeout: 10000
+    timeout: 6000
   }, async (proxyRes) => {
     let body = ''
     proxyRes.on('data', chunk => body += chunk)

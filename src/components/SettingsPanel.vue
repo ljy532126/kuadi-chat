@@ -98,23 +98,22 @@ async function testUapi() {
   testingUapi.value = true; testUapiResult.value = null
   try {
     const key = localUapi.value.trim()
-    // Test with a dummy tracking number — we just check if key is valid
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 7000)
     const url = new URL('/api/v1/misc/tracking/query', window.location.origin)
     url.searchParams.set('tracking_number', 'JT0000000000')
     const resp = await fetch(url.toString(), {
-      headers: { 'X-Uapi-Key': 'Bearer ' + key }
+      headers: { 'X-Uapi-Key': 'Bearer ' + key },
+      signal: ctrl.signal
     })
+    clearTimeout(timer)
     if (resp.status === 401 || resp.status === 403) {
       testUapiResult.value = { ok: false, msg: '密钥无效' }
-    } else if (resp.status === 400) {
-      testUapiResult.value = { ok: true, msg: '连接成功 ✅' }
-    } else if (resp.ok) {
-      testUapiResult.value = { ok: true, msg: '连接成功 ✅' }
     } else {
-      testUapiResult.value = { ok: false, msg: '状态 ' + resp.status }
+      testUapiResult.value = { ok: true, msg: '连接成功 (' + resp.status + ')' }
     }
   } catch {
-    testUapiResult.value = { ok: false, msg: '网络错误' }
+    testUapiResult.value = { ok: false, msg: 'UAPI 服务超时，请稍后重试' }
   }
   testingUapi.value = false
 }

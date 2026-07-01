@@ -186,7 +186,12 @@ async function testUapi() {
   try {
     const url = new URL('/api/v1/misc/tracking/query', window.location.origin)
     url.searchParams.set('tracking_number', 'JT0000000000')
-    const resp = await fetch(url.toString(), { headers: { 'X-Uapi-Key': 'Bearer ' + cfgUapi.value, 'X-Use-Global': '1' } })
+    const resp = await fetch(url.toString(), {
+      headers: {
+        'X-Uapi-Key': 'Bearer ' + cfgUapi.value,
+        'Authorization': 'Bearer ' + props.token
+      }
+    })
     testUapiResult.value = [200, 400, 404].includes(resp.status) ? { ok: true, msg: '连接成功' } : resp.status === 401 || resp.status === 403 ? { ok: false, msg: '密钥无效' } : { ok: false, msg: '状态 ' + resp.status }
   } catch { testUapiResult.value = { ok: false, msg: '网络错误' } }
   testingUapi.value = false
@@ -197,7 +202,11 @@ async function testDs() {
   try {
     const resp = await fetch('/deepseek/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Ds-Key': 'Bearer ' + cfgDs.value, 'X-Use-Global': '1' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Ds-Key': 'Bearer ' + cfgDs.value,
+        'Authorization': 'Bearer ' + props.token
+      },
       body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: 'hi' }], max_tokens: 5 })
     })
     testDsResult.value = resp.ok ? { ok: true, msg: '连接成功' } : resp.status === 401 ? { ok: false, msg: '密钥无效' } : resp.status === 402 ? { ok: false, msg: '余额不足' } : { ok: false, msg: '状态 ' + resp.status }

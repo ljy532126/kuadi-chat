@@ -12,15 +12,27 @@ async function resolveUapiKey(req) {
   if (req.headers['x-use-global'] === '1') {
     const cfg = await GlobalConfig.findById('global').lean()
     if (!cfg || !cfg.enabled || !cfg.uapiKey) return null
-    // Check per-user permission
     const userId = req._userId
     if (userId) {
-      const user = await User.findById(userId).select('useGlobal').catch(() => null)
-      if (!user || !user.useGlobal) return null
+      const user = await User.findById(userId).select('role useGlobal').catch(() => null)
+      if (!user || (!user.useGlobal && user.role !== 'admin')) return null
     }
     return 'Bearer ' + (cfg.uapiKey.startsWith('uapi-') ? cfg.uapiKey : 'uapi-' + cfg.uapiKey)
   }
-  return req.headers['x-uapi-key'] || ''
+  // Direct key usage (from personal settings panel)
+  if (req.headers['x-uapi-key']) return req.headers['x-uapi-key']
+  // Fallback: admin testing authed as admin can use global
+  const userId = req._userId
+  if (userId) {
+    const user = await User.findById(userId).select('role useGlobal').catch(() => null)
+    if (user && (user.useGlobal || user.role === 'admin')) {
+      const cfg = await GlobalConfig.findById('global').lean()
+      if (cfg && cfg.enabled && cfg.uapiKey) {
+        return 'Bearer ' + (cfg.uapiKey.startsWith('uapi-') ? cfg.uapiKey : 'uapi-' + cfg.uapiKey)
+      }
+    }
+  }
+  return ''
 }
 
 async function resolveDsKey(req) {
@@ -29,12 +41,21 @@ async function resolveDsKey(req) {
     if (!cfg || !cfg.enabled || !cfg.deepseekKey) return null
     const userId = req._userId
     if (userId) {
-      const user = await User.findById(userId).select('useGlobal').catch(() => null)
-      if (!user || !user.useGlobal) return null
+      const user = await User.findById(userId).select('role useGlobal').catch(() => null)
+      if (!user || (!user.useGlobal && user.role !== 'admin')) return null
     }
     return 'Bearer ' + cfg.deepseekKey
   }
-  return req.headers['x-ds-key'] || ''
+  if (req.headers['x-ds-key']) return req.headers['x-ds-key']
+  const userId = req._userId
+  if (userId) {
+    const user = await User.findById(userId).select('role useGlobal').catch(() => null)
+    if (user && (user.useGlobal || user.role === 'admin')) {
+      const cfg = await GlobalConfig.findById('global').lean()
+      if (cfg && cfg.enabled && cfg.deepseekKey) return 'Bearer ' + cfg.deepseekKey
+    }
+  }
+  return ''
 }
 
 async function resolveUserEmail(header) {
@@ -82,14 +103,14 @@ router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, async (req, res) 
     proxyRes.on('data', chunk => body += chunk)
     proxyRes.on('end', async () => {
       const success = proxyRes.statusCode === 200
-
-      // Log query
       try {
         const userEmail = logEmail
         const carrier = success ? (JSON.parse(body || '{}').carrier_name || '') : ''
         await QueryLog.create({ email: userEmail, trackingNumber, carrier, success, ip, userId: logUserId, isGuest })
       } catch {}
 
+      // Guard: don't send headers twice if error/timeout already responded
+      if (res.writableEnded) return
       res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json' })
       try {
         const data = JSON.parse(body || '{}')
@@ -100,8 +121,14 @@ router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, async (req, res) 
       }
     })
   })
-  uapiReq.on('timeout', () => { uapiReq.destroy(); res.status(504).json({ error: '查询服务超时' }) })
-  uapiReq.on('error', (e) => { console.error('UAPI error:', e.message); res.status(502).json({ error: '代理请求失败' }) })
+  uapiReq.on('timeout', () => {
+    uapiReq.destroy()
+    if (!res.writableEnded) res.status(504).json({ error: '查询服务超时' })
+  })
+  uapiReq.on('error', (e) => {
+    console.error('UAPI error:', e.message)
+    if (!res.writableEnded) res.status(502).json({ error: '代理请求失败' })
+  })
 })
 
 // DeepSeek proxy
@@ -115,8 +142,8 @@ router.post('/deepseek/v1/chat/completions', async (req, res) => {
       headers: { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(bodyString)), 'Authorization': dsKey },
       timeout: 15000
     }, (proxyRes) => { res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json' }); proxyRes.pipe(res) })
-    proxy.on('timeout', () => { proxy.destroy(); res.status(504).json({ error: 'AI 服务响应超时' }) })
-    proxy.on('error', (e) => { console.error('DS error:', e.message); res.status(502).json({ error: 'AI 连接失败' }) })
+    proxy.on('timeout', () => { proxy.destroy(); if (!res.writableEnded) res.status(504).json({ error: 'AI 服务响应超时' }) })
+    proxy.on('error', (e) => { console.error('DS error:', e.message); if (!res.writableEnded) res.status(502).json({ error: 'AI 连接失败' }) })
     proxy.write(bodyString)
     proxy.end()
   }

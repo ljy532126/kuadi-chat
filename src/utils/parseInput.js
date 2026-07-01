@@ -1,39 +1,44 @@
 const HELP_KEYWORDS = ['帮助', 'help', '怎么', '如何', '什么', '?', '？', '使用']
 
+// Track a tracking number from anywhere in the text
+function findTrackingNumber(text) {
+  const cleaned = text
+    .replace(/快递单号[：:]\s*/g, ' ')
+    .replace(/运单号[：:]\s*/g, ' ')
+    .replace(/,/g, ' ')
+    .replace(/，/g, ' ')
+    .trim()
+
+  // Match: 2-4 letters + 8-18 digits (e.g. JT3168447474853, SF1234567890123)
+  // or pure digits 10-20 (e.g. 777422417791832)
+  const match = cleaned.match(/(?:[a-zA-Z]{2,4}\d{8,18}|\d{10,20})/)
+  return match ? match[0] : null
+}
+
 export function parseInput(text) {
   const trimmed = text.trim()
   if (!trimmed) return null
 
-  // Check if user is asking for help
   const lower = trimmed.toLowerCase()
   if (HELP_KEYWORDS.some(k => lower.includes(k))) {
     return { type: 'help' }
   }
 
-  const parts = trimmed.split(/\s+/)
-  const first = parts[0]
-  let tracking_number = ''
-  let carrier_code = ''
-  let phone = ''
-
-  if (first.length >= 8 && /^[a-zA-Z0-9]+$/.test(first)) {
-    // Looks like a valid tracking number
-    tracking_number = first
-    if (parts.length === 2) {
-      if (/^\d{4}$/.test(parts[1])) {
-        phone = parts[1]
-      } else {
-        carrier_code = parts[1]
+  // Extract tracking number from anywhere in the text
+  const tracking_number = findTrackingNumber(trimmed)
+  if (tracking_number) {
+    // Also extract phone suffix (4 digits) if present
+    let phone = ''
+    const phoneMatch = trimmed.match(/\b\d{4}\b/)
+    if (phoneMatch) {
+      const num = phoneMatch[0]
+      // Don't treat it as phone if it's part of the tracking number
+      if (!tracking_number.includes(num) || tracking_number.indexOf(num) > tracking_number.length - 4) {
+        phone = num
       }
-    } else if (parts.length >= 3) {
-      carrier_code = parts[1]
-      const last = parts[parts.length - 1]
-      if (/^\d{4}$/.test(last)) phone = last
-      else if (parts.length > 3) carrier_code = parts.slice(1).join(' ')
     }
-    return { type: 'query', tracking_number, carrier_code, phone }
+    return { type: 'query', tracking_number, carrier_code: '', phone }
   }
 
-  // Unrecognized — not a valid tracking number
-  return { type: 'invalid', text: trimmed, reason: first.length < 8 ? 'too_short' : 'bad_format' }
+  return { type: 'invalid', text: trimmed }
 }

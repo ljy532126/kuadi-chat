@@ -1,14 +1,4 @@
 import 'dotenv/config'
-
-// ---- Bypass system proxy for uapis.cn ----
-// Node.js by default routes HTTPS through HTTP_PROXY (e.g. Clash on 127.0.0.1:7890)
-// which can block or slow UAPI queries. Force direct connection.
-process.env.HTTP_PROXY = ''
-process.env.HTTPS_PROXY = ''
-process.env.http_proxy = ''
-process.env.https_proxy = ''
-process.env.NO_PROXY = '*'
-
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'

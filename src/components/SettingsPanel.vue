@@ -24,7 +24,7 @@
               <span class="status-dot" :class="uapiOk ? 'ok' : 'miss'"></span>
             </div>
             <p class="section-desc">用于查询快递物流信息，在 <a href="https://uapis.cn" target="_blank" rel="noopener" class="link">uapis.cn</a> 获取</p>
-            <el-input v-model="localUapi" type="password" show-password placeholder="输入完整密钥" size="default" clearable />
+            <el-input v-model="localUapi" type="password" show-password placeholder="输入完整密钥" size="default" clearable autocomplete="off" />
             <div class="test-row" v-if="localUapi">
               <el-button size="small" :loading="testingUapi" @click="testUapi" :disabled="!localUapi.trim()">测试连接</el-button>
               <span v-if="testUapiResult" :class="testUapiResult.ok ? 'test-ok' : 'test-fail'">{{ testUapiResult.msg }}</span>
@@ -40,7 +40,7 @@
               <span class="status-dot" :class="dsOk ? 'ok' : 'miss'"></span>
             </div>
             <p class="section-desc">配置后可智能对话，在 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener" class="link">platform.deepseek.com</a> 获取</p>
-            <el-input v-model="localDeepseek" type="password" show-password placeholder="sk-..." size="default" clearable />
+            <el-input v-model="localDeepseek" type="password" show-password placeholder="sk-..." size="default" clearable autocomplete="off" />
             <div class="test-row" v-if="localDeepseek">
               <el-button size="small" :loading="testingDs" @click="testDeepseek" :disabled="!localDeepseek.trim()">测试连接</el-button>
               <span v-if="testDsResult" :class="testDsResult.ok ? 'test-ok' : 'test-fail'">{{ testDsResult.msg }}</span>

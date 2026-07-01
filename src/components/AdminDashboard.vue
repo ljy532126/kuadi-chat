@@ -27,7 +27,7 @@
 
             <div class="key-section">
               <div class="section-header"><span class="section-title">快递查询 API</span></div>
-              <el-input v-model="cfgUapi" type="password" show-password placeholder="全局 UAPI 密钥" size="default" clearable @change="autoSaveCfg" />
+              <el-input v-model="cfgUapi" type="password" show-password placeholder="全局 UAPI 密钥" size="default" clearable autocomplete="off" @change="autoSaveCfg" />
               <div class="test-row">
                 <el-button size="small" :loading="testingUapi" @click="testUapi" :disabled="!cfgUapi">测试连接</el-button>
                 <span v-if="testUapiResult" :class="testUapiResult.ok ? 'test-ok' : 'test-fail'">{{ testUapiResult.msg }}</span>
@@ -37,7 +37,7 @@
 
             <div class="key-section">
               <div class="section-header"><span class="section-title">DeepSeek AI</span></div>
-              <el-input v-model="cfgDs" type="password" show-password placeholder="全局 DeepSeek 密钥" size="default" clearable @change="autoSaveCfg" />
+              <el-input v-model="cfgDs" type="password" show-password placeholder="全局 DeepSeek 密钥" size="default" clearable autocomplete="off" @change="autoSaveCfg" />
               <div class="test-row">
                 <el-button size="small" :loading="testingDs" @click="testDs" :disabled="!cfgDs">测试连接</el-button>
                 <span v-if="testDsResult" :class="testDsResult.ok ? 'test-ok' : 'test-fail'">{{ testDsResult.msg }}</span>

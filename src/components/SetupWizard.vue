@@ -38,7 +38,7 @@
               </div>
               <div class="form-group half">
                 <label>密码</label>
-                <el-input v-model="form.mongoPass" type="password" show-password placeholder="留空=无认证" size="default" />
+                <el-input v-model="form.mongoPass" type="password" show-password placeholder="留空=无认证" size="default" autocomplete="off" />
               </div>
             </div>
 
@@ -69,7 +69,7 @@
             </div>
             <div class="form-group">
               <label>管理员密码</label>
-              <el-input v-model="form.adminPassword" type="password" show-password placeholder="至少6位" size="default" />
+              <el-input v-model="form.adminPassword" type="password" show-password placeholder="至少6位" size="default" autocomplete="off" />
             </div>
           </div>
 
@@ -81,12 +81,12 @@
 
             <div class="form-group">
               <label>UAPI 快递查询密钥</label>
-              <el-input v-model="form.uapiKey" type="password" show-password placeholder="在 uapis.cn 获取" size="default" />
+              <el-input v-model="form.uapiKey" type="password" show-password placeholder="在 uapis.cn 获取" size="default" autocomplete="off" />
               <span class="hint">在 <a href="https://uapis.cn" target="_blank" class="key-link">uapis.cn</a> 注册获取</span>
             </div>
             <div class="form-group">
               <label>DeepSeek AI 密钥</label>
-              <el-input v-model="form.deepseekKey" type="password" show-password placeholder="sk-..." size="default" />
+              <el-input v-model="form.deepseekKey" type="password" show-password placeholder="sk-..." size="default" autocomplete="off" />
               <span class="hint">在 <a href="https://platform.deepseek.com/api_keys" target="_blank" class="key-link">platform.deepseek.com</a> 获取</span>
             </div>
             <div class="form-group">

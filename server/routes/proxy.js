@@ -3,10 +3,11 @@ import https from 'https'
 import { verifyToken } from '../middleware/auth.js'
 import { rateLimitMiddleware, consumeFreeQuery, getFreeQuota } from '../middleware/rateLimit.js'
 import GlobalConfig from '../models/GlobalConfig.js'
+import QueryLog from '../models/QueryLog.js'
+import User from '../models/User.js'
 
 const router = Router()
 
-// Resolve UAPI key — checks global config first if x-use-global header is set
 async function resolveUapiKey(req) {
   if (req.headers['x-use-global'] === '1') {
     const cfg = await GlobalConfig.findById('global').lean()
@@ -17,15 +18,21 @@ async function resolveUapiKey(req) {
   return req.headers['x-uapi-key'] || ''
 }
 
-// Resolve DeepSeek key
 async function resolveDsKey(req) {
   if (req.headers['x-use-global'] === '1') {
     const cfg = await GlobalConfig.findById('global').lean()
-    if (cfg && cfg.enabled && cfg.deepseekKey) {
-      return 'Bearer ' + cfg.deepseekKey
-    }
+    if (cfg && cfg.enabled && cfg.deepseekKey) return 'Bearer ' + cfg.deepseekKey
   }
   return req.headers['x-ds-key'] || ''
+}
+
+async function resolveUserEmail(header) {
+  if (!header || !header.startsWith('Bearer ')) return 'anonymous'
+  try {
+    const p = verifyToken(header.slice(7))
+    const user = await User.findById(p.userId).select('email').catch(() => null)
+    return user ? user.email : 'anonymous'
+  } catch { return 'anonymous' }
 }
 
 // UAPI proxy
@@ -50,14 +57,24 @@ router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, async (req, res) 
 
   const targetUrl = 'https://uapis.cn/api/v1/misc/tracking/query?' + new URLSearchParams(req.query).toString()
   const uapiKey = await resolveUapiKey(req)
+  const trackingNumber = req.query.tracking_number || ''
 
   const uapiReq = https.get(targetUrl, {
     headers: { 'Authorization': uapiKey, 'Accept': 'application/json' },
     timeout: 10000
-  }, (proxyRes) => {
+  }, async (proxyRes) => {
     let body = ''
     proxyRes.on('data', chunk => body += chunk)
-    proxyRes.on('end', () => {
+    proxyRes.on('end', async () => {
+      const success = proxyRes.statusCode === 200
+
+      // Log query
+      try {
+        const userEmail = await resolveUserEmail(header)
+        const carrier = success ? (JSON.parse(body || '{}').carrier_name || '') : ''
+        await QueryLog.create({ email: userEmail, trackingNumber, carrier, success, ip })
+      } catch {}
+
       res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json' })
       try {
         const data = JSON.parse(body || '{}')

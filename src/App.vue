@@ -29,7 +29,7 @@
       @update:visible="showSettings = $event"
     />
 
-    <AdminPanel v-if="isAdmin" v-model="showAdmin" :token="token" @saved="onAdminSaved" />
+    <AdminDashboard v-if="isAdmin" v-model="showAdmin" :token="token" @saved="onAdminSaved" />
 
     <AuthDialog v-model="showAuth" />
 
@@ -66,7 +66,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import HeaderBar from './components/HeaderBar.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import ChatArea from './components/ChatArea.vue'
@@ -76,7 +76,7 @@ import AnnouncementDialog from './components/AnnouncementDialog.vue'
 import AvatarDialog from './components/AvatarDialog.vue'
 import StatsDialog from './components/StatsDialog.vue'
 import AuthDialog from './components/AuthDialog.vue'
-import AdminPanel from './components/AdminPanel.vue'
+import AdminDashboard from './components/AdminDashboard.vue'
 import SetupWizard from './components/SetupWizard.vue'
 import { useApiKey } from './composables/useApiKey.js'
 import { useAuth } from './composables/useAuth.js'
@@ -308,6 +308,8 @@ function handleCopyImage(idx) {
   captureTrackingResult(msg.data, 'clipboard').then(() => showToast('图片已复制到剪贴板')).catch(e => showToast(e.message || '复制图片失败'))
 }
 
+let heartbeatTimer = null
+
 onMounted(async () => {
   // Check if app needs setup
   try {
@@ -327,6 +329,13 @@ onMounted(async () => {
   await fetchGlobalConfig()
   if (isLoggedIn.value) await checkAdmin()
 
+  // Heartbeat every 60s for online tracking
+  if (isLoggedIn.value) {
+    heartbeatTimer = setInterval(async () => {
+      try { await fetch('/api/admin/heartbeat', { method: 'POST', headers: { Authorization: 'Bearer ' + token.value } }) } catch {}
+    }, 60000)
+  }
+
   messages.push({
     id: ++msgId,
     role: 'system',
@@ -336,6 +345,8 @@ onMounted(async () => {
       : '👋 <b>你好！我是快递查询助手</b><br><br>直接输入快递单号即可查询物流信息。<br><span style="font-size:13px;color:#999;">📌 未登录每天免费查询 10 次，</span><span style="font-size:13px;color:#07c160;">注册登录享受无限次数</span>'
   })
 })
+
+onUnmounted(() => { clearInterval(heartbeatTimer) })
 </script>
 
 <style>

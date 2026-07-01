@@ -111,10 +111,17 @@ app.use(express.static(distPath, {
   }
 }))
 
-// SPA fallback — serve index.html for all non-API non-file routes.
-// This must also carry no-cache headers.
+// SPA fallback — only for page routes, NOT for asset files
+// Asset requests (css/js/png/svg/ico/woff2) that 404 should fail cleanly,
+// not get served index.html (which causes "MIME type text/html" errors)
 app.get('*', (req, res, next) => {
   if (req.url.startsWith('/api/') || req.url.startsWith('/deepseek/')) return next()
+
+  // If it looks like a static asset, let Express 404 it properly
+  if (/\.(css|js|png|svg|ico|woff2?|ttf|eot|jpg|webp|gif|json|map|txt)(\?|$)/.test(req.url)) {
+    return res.status(404).end()
+  }
+
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0')
   res.setHeader('Pragma', 'no-cache')
   res.setHeader('Expires', '0')

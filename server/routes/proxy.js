@@ -50,9 +50,13 @@ async function resolveUserEmail(header) {
 router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown'
   const header = req.headers.authorization
-  let isAuth = false
+  let isAuth = false; let logEmail = 'anonymous'; let logUserId = null; let isGuest = true
   if (header && header.startsWith('Bearer ')) {
-    try { const p = verifyToken(header.slice(7)); req._userId = p.userId; isAuth = true } catch {}
+    try { const p = verifyToken(header.slice(7)); req._userId = p.userId; isAuth = true; isGuest = false } catch {}
+  }
+  if (isAuth) {
+    const user = await resolveUserEmail(header)
+    logEmail = user; logUserId = req._userId
   }
 
   if (!isAuth) {
@@ -81,9 +85,9 @@ router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, async (req, res) 
 
       // Log query
       try {
-        const userEmail = await resolveUserEmail(header)
+        const userEmail = logEmail
         const carrier = success ? (JSON.parse(body || '{}').carrier_name || '') : ''
-        await QueryLog.create({ email: userEmail, trackingNumber, carrier, success, ip })
+        await QueryLog.create({ email: userEmail, trackingNumber, carrier, success, ip, userId: logUserId, isGuest })
       } catch {}
 
       res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json' })

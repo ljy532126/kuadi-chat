@@ -5,7 +5,7 @@ import QueryLog from '../models/QueryLog.js'
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js'
 
 const router = Router()
-const ONLINE_THRESHOLD = 5 * 60 * 1000
+const ONLINE_THRESHOLD = 5 * 60 * 1000 // 5 min
 
 // ---- Public ----
 
@@ -97,6 +97,25 @@ router.get('/queries', authMiddleware, adminMiddleware, async (req, res) => {
     const logs = await QueryLog.find({}).sort({ createdAt: -1 }).limit(limit).lean()
     res.json(logs)
   } catch { res.status(500).json({ error: '获取查询记录失败' }) }
+})
+
+// GET /api/admin/queries/export — CSV export
+router.get('/queries/export', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const logs = await QueryLog.find({}).sort({ createdAt: -1 }).limit(1000).lean()
+    // Build CSV with BOM for Excel UTF-8
+    let csv = '﻿查询时间,查询人,类型,快递单号,快递公司,状态,IP\n'
+    for (const q of logs) {
+      const time = q.createdAt ? new Date(q.createdAt).toLocaleString('zh-CN') : ''
+      const who = q.isGuest ? '游客' : (q.email || '未知')
+      const status = q.success ? '成功' : '失败'
+      const carrier = q.carrier || '-'
+      csv += `"${time}","${who}","${q.isGuest ? '游客查询' : '登录用户'}","${q.trackingNumber}","${carrier}","${status}","${q.ip || ''}"\n`
+    }
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', 'attachment; filename=查询记录_' + new Date().toISOString().slice(0, 10) + '.csv')
+    res.end(csv)
+  } catch { res.status(500).json({ error: '导出失败' }) }
 })
 
 export default router

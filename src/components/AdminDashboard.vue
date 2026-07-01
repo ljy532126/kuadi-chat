@@ -84,17 +84,23 @@
 
           <!-- Queries Tab -->
           <div v-if="tab === 'queries'" class="tab-panel">
+            <div class="query-header">
+              <span class="query-count" v-if="queries.length">共 {{ queries.length }} 条记录</span>
+              <el-button size="small" @click="exportQueries" :disabled="queries.length === 0">导出 CSV</el-button>
+            </div>
             <div v-if="loadingQueries" class="loading">加载中...</div>
             <div v-else class="query-list">
               <div v-for="q in queries" :key="q._id" class="query-row">
                 <div class="query-top">
                   <span class="query-num">{{ q.trackingNumber }}</span>
-                  <span class="query-status" :class="q.success ? 'q-ok' : 'q-fail'">{{ q.success ? 'OK' : 'FAIL' }}</span>
+                  <span class="query-status" :class="q.success ? 'q-ok' : 'q-fail'">{{ q.success ? '成功' : '失败' }}</span>
+                  <span v-if="q.isGuest" class="badge guest-badge">游客</span>
+                  <span v-else class="badge login-badge">登录</span>
                 </div>
                 <div class="query-meta">
                   <span>{{ q.email }}</span>
                   <span v-if="q.carrier"> / {{ q.carrier }}</span>
-                  <span class="query-time">{{ fmtDate(q.createdAt) }}</span>
+                  <span class="query-time">{{ fmtFull(q.createdAt) }}</span>
                 </div>
               </div>
               <p v-if="queries.length === 0" class="empty">暂无查询记录</p>
@@ -238,6 +244,21 @@ function fmtDate(d) {
   const t = new Date(d)
   return t.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
+
+function fmtFull(d) {
+  if (!d) return '-'
+  const t = new Date(d)
+  return t.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+function exportQueries() {
+  const a = document.createElement('a')
+  a.href = '/api/admin/queries/export'
+  a.download = ''
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
 </script>
 
 <style scoped>
@@ -288,6 +309,8 @@ function fmtDate(d) {
 .user-email { font-size: 14px; color: #333; font-weight: 500; }
 .badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 600; }
 .admin-badge { background: #e8f5e9; color: #07c160; }
+.guest-badge { background: #fff3e0; color: #e65100; }
+.login-badge { background: #e3f2fd; color: #1565c0; }
 .user-meta { display: flex; gap: 12px; font-size: 11px; color: #bbb; margin-top: 2px; }
 .user-row-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .global-label { font-size: 12px; color: #999; }
@@ -297,7 +320,9 @@ function fmtDate(d) {
 .query-row:last-child { border-bottom: none; }
 .query-top { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
 .query-num { font-family: monospace; font-size: 14px; color: #333; font-weight: 500; }
-.query-status { font-size: 13px; font-weight: 600; }
+.query-status { font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.query-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.query-count { font-size: 12px; color: #999; }
 .q-ok { color: #07c160; }
 .q-fail { color: #f56c6c; }
 .query-meta { font-size: 12px; color: #999; display: flex; align-items: center; gap: 4px; }

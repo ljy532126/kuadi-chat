@@ -7,6 +7,7 @@ const queryLogSchema = new mongoose.Schema({
   carrier: { type: String, default: '' },
   success: { type: Boolean, default: false },
   ip: { type: String },
+  isGuest: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now }
 })
 

@@ -93,7 +93,7 @@ const { token, email, isAdmin, isLoggedIn, logout, checkAdmin } = useAuth()
 const { avatar: userAvatar, saveAvatar, clearAvatar } = useAvatar()
 const { stats, trackQuery, clearStats: resetStats } = useStats()
 
-const showSettings = ref(isLoggedIn.value && (!hasUapi.value && !hasDeepseek.value))
+const showSettings = ref(false) // never auto-open; only on explicit click
 const showAnnounce = ref(false)
 const showAvatarDialog = ref(false)
 const showStats = ref(false)
@@ -191,13 +191,19 @@ async function handleSend(text) {
   messages.push({ id: ++msgId, role: 'user', type: 'text', text: sanitizeText(text) })
 
   if (!hasUapi.value) {
-    messages.push({
-      id: ++msgId, role: 'system', type: 'warn',
-      text: '请先设置 API 密钥才能查询。点击右上角 ⚙️ 进入配置页面。'
-    })
-    showSettings.value = true
-    isQuerying.value = false
-    return
+    // Global config might not have loaded yet — try again
+    await fetchGlobalConfig()
+    if (!hasUapi.value) {
+      messages.push({
+        id: ++msgId, role: 'system', type: 'warn',
+        text: usingGlobal.value
+          ? '全局 API 服务暂不可用，请联系管理员检查配置。'
+          : '请先设置 API 密钥才能查询。点击右上角 ⚙️ 进入配置页面。'
+      })
+      if (!usingGlobal.value) showSettings.value = true
+      isQuerying.value = false
+      return
+    }
   }
 
   const parsed = parseInput(text)

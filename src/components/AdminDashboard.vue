@@ -3,16 +3,15 @@
     <div v-if="visible" class="drawer-overlay" @click.self="close">
       <div class="drawer-panel">
         <div class="drawer-header">
-          <h3>🛡️ 管理员面板</h3>
+          <h3>管理员面板</h3>
           <button class="close-btn" @click="close"><XMarkIcon class="close-icon" /></button>
         </div>
 
         <div class="drawer-body">
-          <!-- Tabs -->
           <div class="tabs">
-            <button :class="{ active: tab === 'config' }" @click="tab = 'config'">⚙️ 全局配置</button>
-            <button :class="{ active: tab === 'users' }" @click="loadUsers">👥 用户列表</button>
-            <button :class="{ active: tab === 'queries' }" @click="loadQueries">📋 查询记录</button>
+            <button :class="{ active: tab === 'config' }" @click="switchTab('config')">全局配置</button>
+            <button :class="{ active: tab === 'users' }" @click="switchTab('users')">用户列表</button>
+            <button :class="{ active: tab === 'queries' }" @click="switchTab('queries')">查询记录</button>
           </div>
 
           <!-- Config Tab -->
@@ -25,14 +24,24 @@
               <el-switch v-model="cfgEnabled" @change="autoSaveCfg" />
             </div>
             <div class="divider"></div>
+
             <div class="key-section">
-              <div class="section-header"><span class="section-title">📦 快递查询 API</span></div>
+              <div class="section-header"><span class="section-title">快递查询 API</span></div>
               <el-input v-model="cfgUapi" type="password" show-password placeholder="全局 UAPI 密钥" size="default" clearable @change="autoSaveCfg" />
+              <div class="test-row">
+                <el-button size="small" :loading="testingUapi" @click="testUapi" :disabled="!cfgUapi">测试连接</el-button>
+                <span v-if="testUapiResult" :class="testUapiResult.ok ? 'test-ok' : 'test-fail'">{{ testUapiResult.msg }}</span>
+              </div>
             </div>
             <div class="divider"></div>
+
             <div class="key-section">
-              <div class="section-header"><span class="section-title">🤖 DeepSeek AI</span></div>
+              <div class="section-header"><span class="section-title">DeepSeek AI</span></div>
               <el-input v-model="cfgDs" type="password" show-password placeholder="全局 DeepSeek 密钥" size="default" clearable @change="autoSaveCfg" />
+              <div class="test-row">
+                <el-button size="small" :loading="testingDs" @click="testDs" :disabled="!cfgDs">测试连接</el-button>
+                <span v-if="testDsResult" :class="testDsResult.ok ? 'test-ok' : 'test-fail'">{{ testDsResult.msg }}</span>
+              </div>
             </div>
           </div>
 
@@ -47,8 +56,8 @@
                   <span v-if="u.role === 'admin'" class="badge admin-badge">管理员</span>
                 </div>
                 <div class="user-meta">
-                  <span class="user-time">注册: {{ fmtDate(u.createdAt) }}</span>
-                  <span class="user-time">活跃: {{ fmtDate(u.lastActive) }}</span>
+                  <span>注册: {{ fmtDate(u.createdAt) }}</span>
+                  <span>活跃: {{ fmtDate(u.lastActive) }}</span>
                 </div>
               </div>
               <p v-if="users.length === 0" class="empty">暂无注册用户</p>
@@ -62,11 +71,11 @@
               <div v-for="q in queries" :key="q._id" class="query-row">
                 <div class="query-top">
                   <span class="query-num">{{ q.trackingNumber }}</span>
-                  <span class="query-status" :class="q.success ? 'q-ok' : 'q-fail'">{{ q.success ? '✅' : '❌' }}</span>
+                  <span class="query-status" :class="q.success ? 'q-ok' : 'q-fail'">{{ q.success ? 'OK' : 'FAIL' }}</span>
                 </div>
                 <div class="query-meta">
                   <span>{{ q.email }}</span>
-                  <span v-if="q.carrier"> · {{ q.carrier }}</span>
+                  <span v-if="q.carrier"> / {{ q.carrier }}</span>
                   <span class="query-time">{{ fmtDate(q.createdAt) }}</span>
                 </div>
               </div>
@@ -92,39 +101,50 @@ watch(visible, v => emit('update:modelValue', v))
 
 const tab = ref('config')
 
-// Config state
+// Config
 const cfgEnabled = ref(false)
 const cfgUapi = ref('')
 const cfgDs = ref('')
+const testingUapi = ref(false)
+const testUapiResult = ref(null)
+const testingDs = ref(false)
+const testDsResult = ref(null)
+const configLoaded = ref(false)
 let saveTimer = null
 
-// Users state
+// Users
 const users = ref([])
 const loadingUsers = ref(false)
 
-// Queries state
+// Queries
 const queries = ref([])
 const loadingQueries = ref(false)
 
-// Heartbeat
 let heartbeatTimer = null
 
 function close() { visible.value = false }
 
+function switchTab(t) {
+  tab.value = t
+  if (t === 'users' && users.value.length === 0) loadUsers()
+  if (t === 'queries' && queries.value.length === 0) loadQueries()
+}
+
 watch(visible, async (v) => {
   if (!v) return
   tab.value = 'config'
-  // Load config
-  try {
-    const res = await fetch('/api/admin/config/full', { headers: { Authorization: 'Bearer ' + props.token } })
-    if (res.ok) {
-      const d = await res.json()
-      cfgEnabled.value = d.enabled; cfgUapi.value = d.uapiKey || ''; cfgDs.value = d.deepseekKey || ''
-    }
-  } catch {}
+  if (!configLoaded.value) {
+    try {
+      const res = await fetch('/api/admin/config/full', { headers: { Authorization: 'Bearer ' + props.token } })
+      if (res.ok) {
+        const d = await res.json()
+        cfgEnabled.value = d.enabled; cfgUapi.value = d.uapiKey || ''; cfgDs.value = d.deepseekKey || ''
+        configLoaded.value = true
+      }
+    } catch {}
+  }
 })
 
-// Heartbeat every 60s while panel open
 function startHeartbeat() {
   heartbeatTimer = setInterval(async () => {
     try { await fetch('/api/admin/heartbeat', { method: 'POST', headers: { Authorization: 'Bearer ' + props.token } }) } catch {}
@@ -147,6 +167,39 @@ async function autoSaveCfg() {
   }, 500)
 }
 
+async function testUapi() {
+  testingUapi.value = true; testUapiResult.value = null
+  try {
+    const url = new URL('/api/v1/misc/tracking/query', window.location.origin)
+    url.searchParams.set('tracking_number', 'JT0000000000')
+    const resp = await fetch(url.toString(), {
+      headers: { 'X-Uapi-Key': 'Bearer ' + cfgUapi.value, 'X-Use-Global': '1' }
+    })
+    if (resp.status === 401 || resp.status === 403) testUapiResult.value = { ok: false, msg: '密钥无效' }
+    else if (resp.status === 200 || resp.status === 400 || resp.status === 404) testUapiResult.value = { ok: true, msg: '连接成功' }
+    else testUapiResult.value = { ok: false, msg: '状态 ' + resp.status }
+  } catch {
+    testUapiResult.value = { ok: false, msg: '网络错误' }
+  }
+  testingUapi.value = false
+}
+
+async function testDs() {
+  testingDs.value = true; testDsResult.value = null
+  try {
+    const resp = await fetch('/deepseek/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Ds-Key': 'Bearer ' + cfgDs.value, 'X-Use-Global': '1' },
+      body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: 'hi' }], max_tokens: 5 })
+    })
+    if (resp.ok) testDsResult.value = { ok: true, msg: '连接成功' }
+    else if (resp.status === 401) testDsResult.value = { ok: false, msg: '密钥无效' }
+    else if (resp.status === 402) testDsResult.value = { ok: false, msg: '余额不足' }
+    else testDsResult.value = { ok: false, msg: '状态 ' + resp.status }
+  } catch { testDsResult.value = { ok: false, msg: '网络错误' } }
+  testingDs.value = false
+}
+
 async function loadUsers() {
   loadingUsers.value = true
   try {
@@ -159,7 +212,7 @@ async function loadUsers() {
 async function loadQueries() {
   loadingQueries.value = true
   try {
-    const res = await fetch('/api/admin/queries', { headers: { Authorization: 'Bearer ' + props.token } })
+    const res = await fetch('/api/admin/queries?limit=100', { headers: { Authorization: 'Bearer ' + props.token } })
     if (res.ok) queries.value = await res.json()
   } catch {}
   loadingQueries.value = false
@@ -183,7 +236,6 @@ function fmtDate(d) {
 
 .drawer-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
 
-/* Tabs */
 .tabs { display: flex; border-bottom: 2px solid #f0f0f0; flex-shrink: 0; padding: 0 16px; }
 .tabs button {
   background: none; border: none; padding: 12px 16px; font-size: 13px; font-weight: 500;
@@ -204,7 +256,10 @@ function fmtDate(d) {
 .divider { height: 1px; background: #f0f0f0; }
 .loading { text-align: center; color: #999; padding: 20px; }
 
-/* Users */
+.test-row { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.test-ok { color: #07c160; font-size: 12px; }
+.test-fail { color: #e6a23c; font-size: 12px; }
+
 .user-list { display: flex; flex-direction: column; gap: 2px; }
 .user-row { padding: 10px 0; border-bottom: 1px solid #f5f5f5; }
 .user-row:last-child { border-bottom: none; }
@@ -217,19 +272,18 @@ function fmtDate(d) {
 .admin-badge { background: #e8f5e9; color: #07c160; }
 .user-meta { display: flex; gap: 12px; font-size: 11px; color: #bbb; }
 
-/* Queries */
 .query-list { display: flex; flex-direction: column; gap: 2px; }
 .query-row { padding: 10px 0; border-bottom: 1px solid #f5f5f5; }
 .query-row:last-child { border-bottom: none; }
 .query-top { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
 .query-num { font-family: monospace; font-size: 14px; color: #333; font-weight: 500; }
-.query-status { font-size: 13px; }
+.query-status { font-size: 13px; font-weight: 600; }
 .q-ok { color: #07c160; }
 .q-fail { color: #f56c6c; }
-.query-meta { font-size: 12px; color: #999; }
+.query-meta { font-size: 12px; color: #999; display: flex; align-items: center; gap: 4px; }
 .query-time { margin-left: auto; color: #bbb; font-size: 11px; }
 
-.empty { text-align: center; color: #bbb; padding: 20px; }
+.empty { text-align: center; color: #bbb; padding: 20px; font-size: 14px; }
 
 .drawer-enter-active { transition: opacity 0.25s ease; }
 .drawer-enter-active .drawer-panel { transition: transform 0.3s cubic-bezier(0.22, 0.61, 0.36, 1); }

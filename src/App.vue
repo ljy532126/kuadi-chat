@@ -257,9 +257,21 @@ async function handleSend(text) {
         messages.push({ id: ++msgId, role: 'system', type: 'thinking' })
         const aiResult = await queryTracking(keys.uapi, { tracking_number: aiTracking.trackingNumber, carrier_code: aiTracking.carrierCode || '', phone: aiTracking.phone || '' }, token.value, usingGlobal.value)
         const trackMsg2 = messages[trackIdx2]
+
         if (aiResult.error) {
-          trackMsg2.type = (aiResult.status === 404 || aiResult.code === 'free_quota_exhausted') ? 'warn' : 'error'
-          trackMsg2.text = getErrorMessage(aiResult.status, aiResult.message, aiResult.code)
+          // Remove the "thinking" placeholder — replace with AI error explanation
+          const errMsg = getErrorMessage(aiResult.status, aiResult.message, aiResult.code)
+          messages.splice(trackIdx2, 1) // remove the thinking placeholder
+
+          // Ask DeepSeek to explain the failure
+          const explainPrompt = `查询快递单号 ${aiTracking.trackingNumber} 时失败了：${errMsg.replace(/<[^>]+>/g, '')}。请用1-2句话友好地告诉用户原因和建议。`
+          const explainResult = await chatWithDeepSeek(keys.deepseek, explainPrompt, chatHistory, usingGlobal.value)
+
+          if (!explainResult.error) {
+            messages.push({ id: ++msgId, role: 'system', type: 'text', text: sanitizeText(explainResult.content), copyText: explainResult.content })
+          } else {
+            messages.push({ id: ++msgId, role: 'system', type: 'warn', text: errMsg })
+          }
           trackQuery('failed')
         } else {
           trackMsg2.type = 'tracking'

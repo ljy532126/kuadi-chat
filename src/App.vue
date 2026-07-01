@@ -90,7 +90,7 @@ import { copyText, captureTrackingResult } from './composables/useClipboard.js'
 import { parseInput } from './utils/parseInput.js'
 import { sanitizeText } from './utils/sanitize.js'
 
-const { keys, globalEnabled, userUseGlobal, adminContact, hasUapi, hasDeepseek, usingGlobal, saveUapi, saveDeepseek, clearUapi, clearDeepseek, fetchGlobalConfig, fetchUserGlobal } = useApiKey()
+const { keys, globalEnabled, globalHasUapi, globalHasDeepseek, userUseGlobal, adminContact, hasUapi, hasDeepseek, usingGlobal, saveUapi, saveDeepseek, clearUapi, clearDeepseek, fetchGlobalConfig, fetchUserGlobal } = useApiKey()
 const { token, email, isAdmin, isLoggedIn, logout, checkAdmin } = useAuth()
 const { avatar: userAvatar, saveAvatar, clearAvatar } = useAvatar()
 const { stats, trackQuery, clearStats: resetStats } = useStats()

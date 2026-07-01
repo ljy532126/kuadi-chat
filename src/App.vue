@@ -136,6 +136,10 @@ function getErrorMessage(status, msg, code) {
   if (status === 429 && code === 'free_quota_exhausted') {
     return '今日免费查询次数已用完（10次/天）。<br><br>请 <button class="link-btn" onclick="document.querySelector(\'.login-btn\').click()">注册/登录</button> 获取无限查询次数。'
   }
+  // UAPI upstream errors
+  if (code === 'UPSTREAM_TIMEOUT' || code === 'UPSTREAM_ERROR' || status === 502 || status === 504) {
+    return '快递查询服务暂时不可用，请稍后重试。'
+  }
   switch (status) {
     case 400: return '查询参数有误，请检查快递单号格式是否正确。'
     case 401: case 403: return 'UAPI 密钥无效，请在设置中更新。'

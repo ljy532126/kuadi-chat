@@ -7,6 +7,7 @@ import QueryLog from '../models/QueryLog.js'
 import User from '../models/User.js'
 
 const router = Router()
+const RETRIES = 2
 
 async function resolveUapiKey(req) {
   if (req.headers['x-use-global'] === '1') {
@@ -19,9 +20,7 @@ async function resolveUapiKey(req) {
     }
     return 'Bearer ' + (cfg.uapiKey.startsWith('uapi-') ? cfg.uapiKey : 'uapi-' + cfg.uapiKey)
   }
-  // Direct key usage (from personal settings panel)
   if (req.headers['x-uapi-key']) return req.headers['x-uapi-key']
-  // Fallback: admin testing authed as admin can use global
   const userId = req._userId
   if (userId) {
     const user = await User.findById(userId).select('role useGlobal').catch(() => null)
@@ -67,7 +66,7 @@ async function resolveUserEmail(header) {
   } catch { return 'anonymous' }
 }
 
-// UAPI proxy
+// UAPI proxy with retry
 router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown'
   const header = req.headers.authorization
@@ -84,7 +83,6 @@ router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, async (req, res) 
     const left = getFreeQuota(ip)
     if (left <= 0) {
       return res.status(429).json({
-        error: 'free_quota_exhausted',
         message: '今日免费查询次数已用完（10次/天），请注册登录获取更多查询次数。'
       })
     }
@@ -94,41 +92,70 @@ router.get('/api/v1/misc/tracking/query', rateLimitMiddleware, async (req, res) 
   const targetUrl = 'https://uapis.cn/api/v1/misc/tracking/query?' + new URLSearchParams(req.query).toString()
   const uapiKey = await resolveUapiKey(req)
   const trackingNumber = req.query.tracking_number || ''
+  let attempt = 0
 
-  const uapiReq = https.get(targetUrl, {
-    headers: { 'Authorization': uapiKey, 'Accept': 'application/json' },
-    timeout: 6000
-  }, async (proxyRes) => {
-    let body = ''
-    proxyRes.on('data', chunk => body += chunk)
-    proxyRes.on('end', async () => {
-      const success = proxyRes.statusCode === 200
-      try {
-        const userEmail = logEmail
-        const carrier = success ? (JSON.parse(body || '{}').carrier_name || '') : ''
-        await QueryLog.create({ email: userEmail, trackingNumber, carrier, success, ip, userId: logUserId, isGuest })
-      } catch {}
+  function doRequest() {
+    attempt++
+    if (res.writableEnded) return
 
-      // Guard: don't send headers twice if error/timeout already responded
-      if (res.writableEnded) return
-      res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json' })
-      try {
-        const data = JSON.parse(body || '{}')
-        data.free_queries_left = getFreeQuota(ip)
-        res.end(JSON.stringify(data))
-      } catch {
-        res.end(JSON.stringify({ error: 'proxy_error', free_queries_left: getFreeQuota(ip) }))
+    const uapiReq = https.get(targetUrl, {
+      headers: { 'Authorization': uapiKey, 'Accept': 'application/json' },
+      timeout: 6000
+    }, async (proxyRes) => {
+      let body = ''
+      proxyRes.on('data', chunk => body += chunk)
+      proxyRes.on('end', async () => {
+        // Retry on 5xx
+        if (proxyRes.statusCode >= 500 && attempt < RETRIES) {
+          return setTimeout(doRequest, 500 * attempt)
+        }
+
+        const success = proxyRes.statusCode === 200
+        try {
+          const carrier = success ? (JSON.parse(body || '{}').carrier_name || '') : ''
+          await QueryLog.create({ email: logEmail, trackingNumber, carrier, success, ip, userId: logUserId, isGuest })
+        } catch {}
+
+        if (res.writableEnded) return
+        res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json' })
+        try {
+          const data = JSON.parse(body || '{}')
+          data.free_queries_left = getFreeQuota(ip)
+          res.end(JSON.stringify(data))
+        } catch {
+          res.end(JSON.stringify({
+            code: 'UPSTREAM_ERROR',
+            message: body ? '快递查询服务响应异常' : '快递查询服务暂不可用，请稍后重试',
+            free_queries_left: getFreeQuota(ip)
+          }))
+        }
+      })
+    })
+    uapiReq.on('timeout', () => {
+      uapiReq.destroy()
+      if (attempt < RETRIES) return setTimeout(doRequest, 500 * attempt)
+      if (!res.writableEnded) {
+        res.status(504).json({
+          code: 'UPSTREAM_TIMEOUT',
+          message: '快递查询服务超时，请稍后重试',
+          free_queries_left: getFreeQuota(ip)
+        })
       }
     })
-  })
-  uapiReq.on('timeout', () => {
-    uapiReq.destroy()
-    if (!res.writableEnded) res.status(504).json({ error: '查询服务超时' })
-  })
-  uapiReq.on('error', (e) => {
-    console.error('UAPI error:', e.message)
-    if (!res.writableEnded) res.status(502).json({ error: '代理请求失败' })
-  })
+    uapiReq.on('error', (e) => {
+      console.error('UAPI error:', e.message)
+      if (attempt < RETRIES) return setTimeout(doRequest, 500 * attempt)
+      if (!res.writableEnded) {
+        res.status(502).json({
+          code: 'UPSTREAM_ERROR',
+          message: '快递查询服务异常，请稍后重试',
+          free_queries_left: getFreeQuota(ip)
+        })
+      }
+    })
+  }
+
+  doRequest()
 })
 
 // DeepSeek proxy
@@ -142,8 +169,8 @@ router.post('/deepseek/v1/chat/completions', async (req, res) => {
       headers: { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(bodyString)), 'Authorization': dsKey },
       timeout: 15000
     }, (proxyRes) => { res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json' }); proxyRes.pipe(res) })
-    proxy.on('timeout', () => { proxy.destroy(); if (!res.writableEnded) res.status(504).json({ error: 'AI 服务响应超时' }) })
-    proxy.on('error', (e) => { console.error('DS error:', e.message); if (!res.writableEnded) res.status(502).json({ error: 'AI 连接失败' }) })
+    proxy.on('timeout', () => { proxy.destroy(); if (!res.writableEnded) res.status(504).json({ code: 'UPSTREAM_TIMEOUT', message: 'AI 服务响应超时' }) })
+    proxy.on('error', (e) => { console.error('DS error:', e.message); if (!res.writableEnded) res.status(502).json({ code: 'UPSTREAM_ERROR', message: 'AI 连接失败' }) })
     proxy.write(bodyString)
     proxy.end()
   }
@@ -156,7 +183,6 @@ router.post('/deepseek/v1/chat/completions', async (req, res) => {
   }
 })
 
-// Get quota
 router.get('/api/quota', (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown'
   res.json({ free_queries_left: getFreeQuota(ip) })
